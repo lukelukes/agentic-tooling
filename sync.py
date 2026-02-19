@@ -13,6 +13,7 @@ Usage:
 
 import argparse
 import hashlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -28,7 +29,7 @@ ROOT = Path(__file__).parent
 #   - @<branch> is optional, defaults to "main"
 
 MAPPINGS: dict[str, str] = {
-    # "claude-code/skills/skill-creator": "github:anthropics/courses/anthropic_skills/skill-creator@main",
+    "agents/skills/skill-creator": "github:anthropics/skills/skills/skill-creator@main",
 }
 
 
@@ -71,7 +72,7 @@ def fetch_remote(owner: str, repo: str, path: str, ref: str, dest: Path):
             raise FileNotFoundError(f"Path '{path}' not found in {owner}/{repo}@{ref}")
 
         if dest.exists():
-            dest.delete()
+            shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
         src.copy(dest)
 
 
@@ -154,21 +155,20 @@ def main():
         sys.exit(1)
 
     targets = {args.key: MAPPINGS[args.key]} if args.key else MAPPINGS
-    changed = sum(
-        1 for key, remote in targets.items()
-        if _try_sync(key, remote, dry_run=args.dry_run, check_only=args.check)
-    )
+    changed = failed = 0
+    for key, remote in targets.items():
+        try:
+            if sync_one(key, remote, dry_run=args.dry_run, check_only=args.check):
+                changed += 1
+        except Exception as e:
+            print(f"  FAILED      {key}: {e}")
+            failed += 1
 
     label = "need updating" if args.check else "would be synced" if args.dry_run else "updated"
-    print(f"\n{changed}/{len(targets)} {label}.")
-
-
-def _try_sync(key: str, remote: str, *, dry_run: bool, check_only: bool) -> bool:
-    try:
-        return sync_one(key, remote, dry_run=dry_run, check_only=check_only)
-    except Exception as e:
-        print(f"  FAILED      {key}: {e}")
-        return True
+    parts = [f"{changed}/{len(targets)} {label}"]
+    if failed:
+        parts.append(f"{failed} failed")
+    print(f"\n{', '.join(parts)}.")
 
 
 if __name__ == "__main__":
