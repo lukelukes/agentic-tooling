@@ -73,7 +73,7 @@ def fetch_remote(owner: str, repo: str, path: str, ref: str, dest: Path):
 
         if dest.exists():
             shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
-        src.copy(dest)
+        src.copy(dest, preserve_metadata=True)
 
 
 def hash_path(p: Path) -> str:
