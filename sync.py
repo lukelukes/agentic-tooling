@@ -28,8 +28,11 @@ ROOT = Path(__file__).parent
 #   - <path> can be a file or directory
 #   - @<branch> is optional, defaults to "main"
 
+SKILLS_DIR = "agents/skills"
+
 MAPPINGS: dict[str, str] = {
-    "agents/skills/skill-creator": "github:anthropics/skills/skills/skill-creator@main",
+    f"{SKILLS_DIR}/skill-creator": "github:anthropics/skills/skills/skill-creator@main",
+    f"{SKILLS_DIR}/humanizer/SKILL.md": "github:blader/humanizer/SKILL.md@main"
 }
 
 
@@ -63,7 +66,7 @@ def fetch_remote(owner: str, repo: str, path: str, ref: str, dest: Path):
             check=True, capture_output=True, text=True,
         )
         subprocess.run(
-            ["git", "sparse-checkout", "set", path],
+            ["git", "sparse-checkout", "set", "--no-cone", path],
             cwd=tmp_path, check=True, capture_output=True, text=True,
         )
 
