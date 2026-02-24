@@ -1,0 +1,10 @@
+{
+  "agents/skills/skill-creator": {
+    "commit": "1ed29a03dc852d30fa6ef2ca53a67dc2c2c2c563",
+    "hash": "1f326407866a81a88822a0195265921e07f905aca8a040fcf61bb4fc12b71d0e"
+  },
+  "agents/skills/humanizer/SKILL.md": {
+    "commit": "d8085c7da5ddb9a179572837d4806b68cde3e9ff",
+    "hash": "52b73cf256fad4165855aca93cc86cbf3aba698b2474b0d7a8e502b2717af1a3"
+  }
+}
