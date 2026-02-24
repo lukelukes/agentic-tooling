@@ -33,6 +33,7 @@ LOCK_FILE = ROOT / "sync-lock.json"
 SKILLS_DIR = "agents/skills"
 
 MAPPINGS: dict[str, str] = {
+    f"{SKILLS_DIR}/frontend-design": "github:anthropics/skills/skills/frontend-design@main",
     f"{SKILLS_DIR}/skill-creator": "github:anthropics/skills/skills/skill-creator@main",
     f"{SKILLS_DIR}/humanizer/SKILL.md": "github:blader/humanizer/SKILL.md@main",
 }

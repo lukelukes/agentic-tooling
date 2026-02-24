@@ -6,5 +6,9 @@
   "agents/skills/humanizer/SKILL.md": {
     "commit": "d8085c7da5ddb9a179572837d4806b68cde3e9ff",
     "hash": "52b73cf256fad4165855aca93cc86cbf3aba698b2474b0d7a8e502b2717af1a3"
+  },
+  "agents/skills/frontend-design": {
+    "commit": "1ed29a03dc852d30fa6ef2ca53a67dc2c2c2c563",
+    "hash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
   }
 }
