@@ -18,10 +18,21 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).parent
 LOCK_FILE = ROOT / "sync-lock.json"
+
+# ── ANSI helpers ─────────────────────────────────────────────────────
+
+_COLOR = sys.stdout.isatty()
+
+def green(s: str) -> str: return f"\033[32m{s}\033[0m" if _COLOR else s
+def yellow(s: str) -> str: return f"\033[33m{s}\033[0m" if _COLOR else s
+def red(s: str) -> str: return f"\033[31m{s}\033[0m" if _COLOR else s
+def dim(s: str) -> str: return f"\033[2m{s}\033[0m" if _COLOR else s
+def bold(s: str) -> str: return f"\033[1m{s}\033[0m" if _COLOR else s
 
 # ── Mappings ──────────────────────────────────────────────────────────
 # "local/path" (relative to repo root) -> "github:owner/repo/path@ref"
@@ -178,72 +189,83 @@ def fetch_remote(
 # ── Commands ──────────────────────────────────────────────────────────
 
 
-def install_one(key: str, remote: str, lock: dict) -> bool:
-    """Install at pinned commit from lock file. Returns True if installed."""
+def install_one(key: str, remote: str, lock: dict) -> str:
+    """Install at pinned commit from lock file. Returns status: 'installed'|'fresh'|'not_pinned'."""
     owner, repo, path, ref = parse_remote(remote)
-    tag = f"{key} <- {owner}/{repo}/{path}@{ref}"
+    remote_label = f"{owner}/{repo}/{path}@{ref}"
     entry = lock.get(key)
 
     if not entry:
-        print(f"  NOT PINNED  {tag}  (run --update)")
-        return False
+        print(f"{red('Not pinned')}  {key}  {dim('(run --update)')}")
+        return "not_pinned"
 
     dest = ROOT / key
     if dest.exists() and hash_path(dest) == entry["hash"]:
-        print(f"  up-to-date  {tag}")
-        return False
+        print(f"    {green('Fresh')}  {key}")
+        return "fresh"
 
-    print(f"  installing  {tag}  ({entry['commit'][:8]})")
+    sha = entry["commit"][:7]
     fetch_remote(owner, repo, path, entry["commit"], dest, is_commit=True)
-    return True
+    print(f"{green('Installed')}  {key}  {dim(f'({sha})')}")
+    print(f"           {dim(remote_label)}")
+    return "installed"
 
 
-def update_one(key: str, remote: str, lock: dict) -> bool:
-    """Fetch latest from remote branch and update lock entry. Returns True if changed."""
+def update_one(key: str, remote: str, lock: dict) -> str:
+    """Fetch latest from remote branch and update lock entry. Returns status: 'updated'|'pinned'|'fresh'."""
     owner, repo, path, ref = parse_remote(remote)
-    tag = f"{key} <- {owner}/{repo}/{path}@{ref}"
+    remote_label = f"{owner}/{repo}/{path}@{ref}"
     dest = ROOT / key
     entry = lock.get(key)
 
-    print(f"  syncing     {tag}")
     commit = fetch_remote(owner, repo, path, ref, dest)
     new_hash = hash_path(dest)
 
     if entry and entry["commit"] == commit:
-        print(f"  up-to-date  {tag}")
-        return False
+        print(f"    {green('Fresh')}  {key}")
+        return "fresh"
 
     lock[key] = {"commit": commit, "hash": new_hash}
     if entry:
-        print(f"  updated     {tag}  ({entry['commit'][:8]} -> {commit[:8]})")
+        old_sha = entry["commit"][:7]
+        new_sha = commit[:7]
+        print(f"  {yellow('Updated')}  {key}  {dim(f'({old_sha} → {new_sha})')}")
+        print(f"           {dim(remote_label)}")
+        return "updated"
     else:
-        print(f"  pinned      {tag}  ({commit[:8]})")
-    return True
+        print(f"   {green('Pinned')}  {key}  {dim(f'({commit[:7]})')}")
+        print(f"           {dim(remote_label)}")
+        return "pinned"
 
 
-def check_one(key: str, remote: str, lock: dict):
-    """Check if upstream has updates. Prints GitHub links for comparison."""
+def check_one(key: str, remote: str, lock: dict) -> str:
+    """Check if upstream has updates. Returns status: 'fresh'|'outdated'|'not_pinned'."""
     owner, repo, path, ref = parse_remote(remote)
-    tag = f"{key} <- {owner}/{repo}/{path}@{ref}"
     entry = lock.get(key)
 
     if not entry:
-        print(f"  NOT PINNED  {tag}")
-        return
+        print(f"{red('Not pinned')}  {key}")
+        return "not_pinned"
 
     latest = get_latest_commit(owner, repo, ref)
 
     if latest == entry["commit"]:
-        print(f"  up-to-date  {tag}  ({entry['commit'][:8]})")
+        print(f"    {green('Fresh')}  {key}  {dim(f'({entry["commit"][:7]})')}")
+        dest = ROOT / key
+        if dest.exists() and hash_path(dest) != entry["hash"]:
+            print(f"           {dim('(locally modified)')}")
+        return "fresh"
     else:
-        print(f"  outdated    {tag}  (pinned: {entry['commit'][:8]}, latest: {latest[:8]})")
-        print(f"              pinned:  {github_blob_url(owner, repo, path, entry['commit'])}")
-        print(f"              latest:  {github_blob_url(owner, repo, path, latest)}")
-        print(f"              history: {github_history_url(owner, repo, path, ref)}")
-
-    dest = ROOT / key
-    if dest.exists() and hash_path(dest) != entry["hash"]:
-        print(f"              (locally modified)")
+        pinned_sha = entry["commit"][:7]
+        latest_sha = latest[:7]
+        print(f" {yellow('Outdated')}  {key}  {dim(f'({pinned_sha} → {latest_sha})')}")
+        print(f"           {dim('pinned:  ' + github_blob_url(owner, repo, path, entry['commit']))}")
+        print(f"           {dim('latest:  ' + github_blob_url(owner, repo, path, latest))}")
+        print(f"           {dim('history: ' + github_history_url(owner, repo, path, ref))}")
+        dest = ROOT / key
+        if dest.exists() and hash_path(dest) != entry["hash"]:
+            print(f"           {dim('(locally modified)')}")
+        return "outdated"
 
 
 def main():
@@ -267,25 +289,42 @@ def main():
         for key, remote in MAPPINGS.items():
             dest = ROOT / key
             entry = lock.get(key)
-            status = "ok" if dest.exists() else "MISSING"
-            pin = f"  ({entry['commit'][:8]})" if entry else "  (not pinned)"
-            print(f"  [{status:>7}]  {key} <- {remote}{pin}")
+            if not dest.exists():
+                print(f"  {red('Missing')}  {key}")
+            elif entry:
+                print(f"    {green('Fresh')}  {key}  {dim(f'({entry["commit"][:7]})')}")
+            else:
+                print(f"{red('Not pinned')}  {key}")
+            print(f"           {dim(remote)}")
         return
 
     if args.key and args.key not in MAPPINGS:
-        print(f"Unknown mapping key: {args.key}")
-        print(f"Available: {', '.join(MAPPINGS.keys())}")
+        print(f"{red('Error')}: unknown key {bold(args.key)}")
+        print(f"  available: {dim(', '.join(MAPPINGS.keys()))}")
         sys.exit(1)
 
     targets = {args.key: MAPPINGS[args.key]} if args.key else MAPPINGS
     lock = read_lock()
+    t0 = time.monotonic()
 
     if args.check:
+        outdated = failed = 0
         for key, remote in targets.items():
             try:
-                check_one(key, remote, lock)
+                status = check_one(key, remote, lock)
+                if status == "outdated":
+                    outdated += 1
             except Exception as e:
-                print(f"  FAILED      {key}: {e}")
+                print(f"   {red('Failed')}  {key}: {e}")
+                failed += 1
+        elapsed = time.monotonic() - t0
+        parts = []
+        if outdated:
+            parts.append(bold(yellow(f"{outdated} outdated")))
+        parts.append(f"{len(targets) - outdated - failed} fresh")
+        if failed:
+            parts.append(bold(red(f"{failed} failed")))
+        print(f"\n  {', '.join(parts)} {dim(f'in {elapsed:.1f}s')}")
         return
 
     # No lock file yet → auto-update to create it
@@ -295,23 +334,31 @@ def main():
     for key, remote in targets.items():
         try:
             if update:
-                result = update_one(key, remote, lock)
+                status = update_one(key, remote, lock)
+                if status in ("updated", "pinned"):
+                    changed += 1
             else:
-                result = install_one(key, remote, lock)
-            if result:
-                changed += 1
+                status = install_one(key, remote, lock)
+                if status == "installed":
+                    changed += 1
         except Exception as e:
-            print(f"  FAILED      {key}: {e}")
+            print(f"   {red('Failed')}  {key}: {e}")
             failed += 1
 
     if update:
         write_lock(lock)
 
+    elapsed = time.monotonic() - t0
     label = "updated" if update else "installed"
-    parts = [f"{changed}/{len(targets)} {label}"]
+    unchanged = len(targets) - changed - failed
+    parts = []
+    if changed:
+        parts.append(bold(green(f"{changed} {label}")))
+    if unchanged:
+        parts.append(f"{unchanged} unchanged")
     if failed:
-        parts.append(f"{failed} failed")
-    print(f"\n{', '.join(parts)}.")
+        parts.append(bold(red(f"{failed} failed")))
+    print(f"\n  {', '.join(parts)} {dim(f'in {elapsed:.1f}s')}")
 
 
 if __name__ == "__main__":
