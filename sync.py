@@ -5,10 +5,10 @@
 """Sync local paths with their upstream remote sources.
 
 Usage:
-    uv run sync.py                  # install at pinned versions from lock file
-    uv run sync.py --update [key]   # fetch latest and update lock file
-    uv run sync.py --check          # check for upstream updates (with GitHub links)
-    uv run sync.py --list           # list all mappings
+    uv run sync.py install [key]    # install at pinned versions from lock file
+    uv run sync.py update [key]     # fetch latest and update lock file
+    uv run sync.py check [key]      # check for upstream updates (with GitHub links)
+    uv run sync.py list             # list all mappings
 """
 
 import argparse
@@ -196,7 +196,7 @@ def install_one(key: str, remote: str, lock: dict) -> str:
     entry = lock.get(key)
 
     if not entry:
-        print(f"{red('Not pinned')}  {key}  {dim('(run --update)')}")
+        print(f"{red('Not pinned')}  {key}  {dim('(run update)')}")
         return "not_pinned"
 
     dest = ROOT / key
@@ -268,97 +268,154 @@ def check_one(key: str, remote: str, lock: dict) -> str:
         return "outdated"
 
 
+def resolve_targets(key: str | None) -> dict[str, str]:
+    """Resolve which mappings to operate on."""
+    if key:
+        if key not in MAPPINGS:
+            print(f"{red('Error')}: unknown key {bold(key)}")
+            print(f"  available: {dim(', '.join(MAPPINGS.keys()))}")
+            sys.exit(1)
+        return {key: MAPPINGS[key]}
+    return MAPPINGS
+
+
+def cmd_install(args: argparse.Namespace):
+    """Install at pinned versions from lock file."""
+    if not LOCK_FILE.exists():
+        print(f"{red('Error')}: no lock file found. Run {bold('update')} first.")
+        sys.exit(1)
+
+    targets = resolve_targets(args.key)
+    lock = read_lock()
+    t0 = time.monotonic()
+
+    changed = failed = 0
+    for key, remote in targets.items():
+        try:
+            status = install_one(key, remote, lock)
+            if status == "installed":
+                changed += 1
+        except Exception as e:
+            print(f"   {red('Failed')}  {key}: {e}")
+            failed += 1
+
+    elapsed = time.monotonic() - t0
+    unchanged = len(targets) - changed - failed
+    parts = []
+    if changed:
+        parts.append(bold(green(f"{changed} installed")))
+    if unchanged:
+        parts.append(f"{unchanged} unchanged")
+    if failed:
+        parts.append(bold(red(f"{failed} failed")))
+    print(f"\n  {', '.join(parts)} {dim(f'in {elapsed:.1f}s')}")
+
+
+def cmd_update(args: argparse.Namespace):
+    """Fetch latest from upstream and update lock file."""
+    targets = resolve_targets(args.key)
+    lock = read_lock()
+    t0 = time.monotonic()
+
+    changed = failed = 0
+    for key, remote in targets.items():
+        try:
+            status = update_one(key, remote, lock)
+            if status in ("updated", "pinned"):
+                changed += 1
+        except Exception as e:
+            print(f"   {red('Failed')}  {key}: {e}")
+            failed += 1
+
+    write_lock(lock)
+
+    elapsed = time.monotonic() - t0
+    unchanged = len(targets) - changed - failed
+    parts = []
+    if changed:
+        parts.append(bold(green(f"{changed} updated")))
+    if unchanged:
+        parts.append(f"{unchanged} unchanged")
+    if failed:
+        parts.append(bold(red(f"{failed} failed")))
+    print(f"\n  {', '.join(parts)} {dim(f'in {elapsed:.1f}s')}")
+
+
+def cmd_check(args: argparse.Namespace):
+    """Check for upstream updates without modifying anything."""
+    if not LOCK_FILE.exists():
+        print(f"{red('Error')}: no lock file found. Run {bold('update')} first.")
+        sys.exit(1)
+
+    targets = resolve_targets(args.key)
+    lock = read_lock()
+    t0 = time.monotonic()
+
+    outdated = failed = 0
+    for key, remote in targets.items():
+        try:
+            status = check_one(key, remote, lock)
+            if status == "outdated":
+                outdated += 1
+        except Exception as e:
+            print(f"   {red('Failed')}  {key}: {e}")
+            failed += 1
+
+    elapsed = time.monotonic() - t0
+    parts = []
+    if outdated:
+        parts.append(bold(yellow(f"{outdated} outdated")))
+    parts.append(f"{len(targets) - outdated - failed} fresh")
+    if failed:
+        parts.append(bold(red(f"{failed} failed")))
+    print(f"\n  {', '.join(parts)} {dim(f'in {elapsed:.1f}s')}")
+
+
+def cmd_list(args: argparse.Namespace):
+    """List all mappings and their status."""
+    lock = read_lock()
+    for key, remote in MAPPINGS.items():
+        dest = ROOT / key
+        entry = lock.get(key)
+        if not dest.exists():
+            print(f"  {red('Missing')}  {key}")
+        elif entry:
+            print(f"    {green('Fresh')}  {key}  {dim(f'({entry["commit"][:7]})')}")
+        else:
+            print(f"{red('Not pinned')}  {key}")
+        print(f"           {dim(remote)}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Sync local paths with upstream remotes.",
         suggest_on_error=True,
         color=True,
     )
-    parser.add_argument("key", nargs="?", help="Target a single mapping by its local path key")
-    parser.add_argument("--update", action="store_true", help="Fetch latest and update lock file")
-    parser.add_argument("--check", action="store_true", help="Check for upstream updates")
-    parser.add_argument("--list", action="store_true", help="List all mappings")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_install = sub.add_parser("install", help="Install at pinned versions from lock file")
+    p_install.add_argument("key", nargs="?", help="Target a single mapping by its local path key")
+    p_install.set_defaults(func=cmd_install)
+
+    p_update = sub.add_parser("update", help="Fetch latest and update lock file")
+    p_update.add_argument("key", nargs="?", help="Target a single mapping by its local path key")
+    p_update.set_defaults(func=cmd_update)
+
+    p_check = sub.add_parser("check", help="Check for upstream updates")
+    p_check.add_argument("key", nargs="?", help="Target a single mapping by its local path key")
+    p_check.set_defaults(func=cmd_check)
+
+    p_list = sub.add_parser("list", help="List all mappings")
+    p_list.set_defaults(func=cmd_list)
+
     args = parser.parse_args()
 
     if not MAPPINGS:
         print("No mappings configured. Edit MAPPINGS in sync.py.")
         return
 
-    if args.list:
-        lock = read_lock()
-        for key, remote in MAPPINGS.items():
-            dest = ROOT / key
-            entry = lock.get(key)
-            if not dest.exists():
-                print(f"  {red('Missing')}  {key}")
-            elif entry:
-                print(f"    {green('Fresh')}  {key}  {dim(f'({entry["commit"][:7]})')}")
-            else:
-                print(f"{red('Not pinned')}  {key}")
-            print(f"           {dim(remote)}")
-        return
-
-    if args.key and args.key not in MAPPINGS:
-        print(f"{red('Error')}: unknown key {bold(args.key)}")
-        print(f"  available: {dim(', '.join(MAPPINGS.keys()))}")
-        sys.exit(1)
-
-    targets = {args.key: MAPPINGS[args.key]} if args.key else MAPPINGS
-    lock = read_lock()
-    t0 = time.monotonic()
-
-    if args.check:
-        outdated = failed = 0
-        for key, remote in targets.items():
-            try:
-                status = check_one(key, remote, lock)
-                if status == "outdated":
-                    outdated += 1
-            except Exception as e:
-                print(f"   {red('Failed')}  {key}: {e}")
-                failed += 1
-        elapsed = time.monotonic() - t0
-        parts = []
-        if outdated:
-            parts.append(bold(yellow(f"{outdated} outdated")))
-        parts.append(f"{len(targets) - outdated - failed} fresh")
-        if failed:
-            parts.append(bold(red(f"{failed} failed")))
-        print(f"\n  {', '.join(parts)} {dim(f'in {elapsed:.1f}s')}")
-        return
-
-    # No lock file yet → auto-update to create it
-    update = args.update or not LOCK_FILE.exists()
-
-    changed = failed = 0
-    for key, remote in targets.items():
-        try:
-            if update:
-                status = update_one(key, remote, lock)
-                if status in ("updated", "pinned"):
-                    changed += 1
-            else:
-                status = install_one(key, remote, lock)
-                if status == "installed":
-                    changed += 1
-        except Exception as e:
-            print(f"   {red('Failed')}  {key}: {e}")
-            failed += 1
-
-    if update:
-        write_lock(lock)
-
-    elapsed = time.monotonic() - t0
-    label = "updated" if update else "installed"
-    unchanged = len(targets) - changed - failed
-    parts = []
-    if changed:
-        parts.append(bold(green(f"{changed} {label}")))
-    if unchanged:
-        parts.append(f"{unchanged} unchanged")
-    if failed:
-        parts.append(bold(red(f"{failed} failed")))
-    print(f"\n  {', '.join(parts)} {dim(f'in {elapsed:.1f}s')}")
+    args.func(args)
 
 
 if __name__ == "__main__":
