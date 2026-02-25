@@ -5,7 +5,8 @@
 """Sync local paths with their upstream remote sources.
 
 Usage:
-    uv run sync.py install [key]    # install at pinned versions from lock file
+    uv run sync.py                  # install at pinned versions (default)
+    uv run sync.py install [key]    # same as above, optionally targeting one key
     uv run sync.py update [key]     # fetch latest and update lock file
     uv run sync.py check [key]      # check for upstream updates (with GitHub links)
     uv run sync.py list             # list all mappings
@@ -392,9 +393,9 @@ def main():
         suggest_on_error=True,
         color=True,
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
 
-    p_install = sub.add_parser("install", help="Install at pinned versions from lock file")
+    p_install = sub.add_parser("install", help="Install at pinned versions from lock file (default)")
     p_install.add_argument("key", nargs="?", help="Target a single mapping by its local path key")
     p_install.set_defaults(func=cmd_install)
 
@@ -415,7 +416,11 @@ def main():
         print("No mappings configured. Edit MAPPINGS in sync.py.")
         return
 
-    args.func(args)
+    if not args.command:
+        args.key = None
+        cmd_install(args)
+    else:
+        args.func(args)
 
 
 if __name__ == "__main__":
