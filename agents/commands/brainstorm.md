@@ -139,30 +139,3 @@ What still needs validation or further exploration. Be specific about what quest
 Concrete actions to move forward. Prioritize and be specific. ("Talk to 5 potential users about X" not "Do market research")
 </output_document>
 ```
-
----
-
-## Usage Notes
-
-**To use this prompt:**
-1. Copy the content between the triple backticks into your system prompt
-2. Start a conversation with your idea or problem
-
-**Example conversation starters the agent handles well:**
-- Rough idea: "I'm thinking about an app that helps freelancers manage contracts..."
-- Problem statement: "Our deployment process takes 4 hours and breaks constantly"  
-- Vague spark: "Something in the AI + healthcare space"
-
-**User controls:**
-- Request specific techniques: "Can you run a pre-mortem on this?"
-- Accelerate: "I think we have enough, let's wrap up"
-- Go deeper: "I want to explore the competitive angle more"
-- Challenge the agent: "Why do you think that's a weak assumption?"
-
-**The agent will:**
-- Ask clarifying questions if your input is vague
-- Share its evolving thinking throughout
-- Push back hard on weak reasoning
-- Select elicitation techniques automatically (or follow your requests)
-- Refuse to generate the document if critical areas are unexplored
-- Produce a comprehensive exploration document when ready
