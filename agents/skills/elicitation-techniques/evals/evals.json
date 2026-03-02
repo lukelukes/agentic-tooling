@@ -1,0 +1,23 @@
+{
+  "skill_name": "elicitation-techniques",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Our CI pipeline keeps failing intermittently. Tests pass locally but fail about 30% of the time in CI. Help me think through what's going on.",
+      "expected_output": "Should select appropriate debugging/root-cause technique (5 Whys, First Principles, or Rubber Duck), then execute it with specifics about CI flakiness patterns",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "We need to choose between a monorepo and polyrepo setup for our 5 microservices. 3 engineers, growing to maybe 8 this year. Help me decide.",
+      "expected_output": "Should select a decision-making technique (Comparative Analysis Matrix, Debate Club, or Architecture Decision Records), then execute it with monorepo vs polyrepo specifics",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "We have a CLI tool for managing docker containers. Usage is flat. Help me brainstorm ways to make it more useful or find new audiences.",
+      "expected_output": "Should select a creative exploration technique (SCAMPER, Genre Mashup, or What If Scenarios), then execute it with concrete ideas for the CLI tool",
+      "files": []
+    }
+  ]
+}
