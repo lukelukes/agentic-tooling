@@ -14,5 +14,9 @@
   "agents/skills/hegelian-dialectic/SKILL.md": {
     "commit": "379e28c3c200f04dec0d717d62b37958a5ff1a17",
     "hash": "6c0f239ee2b9be85de2a275de8da6372f5d9890e6d455a494ab679034e6cb927"
+  },
+  "agents/skills/visual-explainer/SKILL.md": {
+    "commit": "ef7d98f7d16a9daddd9865905ee73e0f06fb861d",
+    "hash": "00454ab89f88ed9bf590a3f2db7d6489c114dca0337afad2ae85cd50d9556d5e"
   }
 }
