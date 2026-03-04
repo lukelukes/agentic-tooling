@@ -224,7 +224,7 @@ def update_one(key: str, remote: str, lock: dict) -> str:
     commit = fetch_remote(owner, repo, path, ref, dest)
     new_hash = hash_path(dest)
 
-    if entry and entry["commit"] == commit:
+    if entry and new_hash == entry["hash"]:
         print(f"    {green('Fresh')}  {key}")
         return "fresh"
 
