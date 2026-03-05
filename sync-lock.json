@@ -18,5 +18,9 @@
   "agents/skills/visual-explainer/SKILL.md": {
     "commit": "c6cda6ce8a3094f1acce6ed05aeb4ccb5ce40c2d",
     "hash": "d56d36dd701fa780dcc084bca1cad0303281a5f4375d5b400c6159c6df970ffd"
+  },
+  "agents/skills/impeccable-design": {
+    "commit": "a9c66c4cdad75877afc2d40c4265fb74d875a27e",
+    "hash": "b693884ac6f6bda14f9e8a1c1898d6042cc0d50535e9fb77a38fdb7f1486b2a1"
   }
 }
