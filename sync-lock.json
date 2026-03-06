@@ -1,7 +1,7 @@
 {
   "agents/skills/skill-creator": {
-    "commit": "3d59511518591fa82e6cfcf0438d68dd5dad3e76",
-    "hash": "b1a865ca10f5963426705ec63db2eaec60eb98e84898a850fd74bef4f3a16e75"
+    "commit": "b0cbd3df1533b396d281a6886d5132f623393a9c",
+    "hash": "ad480cdd4a4b5886cb7d35c2055d4b9005babe15d80ace54d90f4259f3bf3257"
   },
   "agents/skills/humanizer/SKILL.md": {
     "commit": "d8085c7da5ddb9a179572837d4806b68cde3e9ff",
@@ -12,12 +12,12 @@
     "hash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
   },
   "agents/skills/hegelian-dialectic/SKILL.md": {
-    "commit": "379e28c3c200f04dec0d717d62b37958a5ff1a17",
-    "hash": "6c0f239ee2b9be85de2a275de8da6372f5d9890e6d455a494ab679034e6cb927"
+    "commit": "0e55c1a4f12a6ded285f860a9d565fbd2ae4ff22",
+    "hash": "9a67faf622c0b66c9f412cceaba1493abaae47c61d230b35e3181ffd14881e97"
   },
   "agents/skills/visual-explainer/SKILL.md": {
-    "commit": "c6cda6ce8a3094f1acce6ed05aeb4ccb5ce40c2d",
-    "hash": "d56d36dd701fa780dcc084bca1cad0303281a5f4375d5b400c6159c6df970ffd"
+    "commit": "f41c48fd507c95f53151047788662e91def8c673",
+    "hash": "76567c6e87e8f19fa6fd838ffc4011756af885e3fd5b7422e199dc430b22097d"
   },
   "agents/skills/impeccable-design": {
     "commit": "a9c66c4cdad75877afc2d40c4265fb74d875a27e",

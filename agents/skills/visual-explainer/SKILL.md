@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires a browser to view generated HTML files. Optional surf-cli for AI image generation.
 metadata:
   author: nicobailon
-  version: "0.5.0"
+  version: "0.5.1"
 ---
 
 # Visual Explainer
@@ -13,6 +13,21 @@ metadata:
 Generate self-contained HTML files for technical diagrams, visualizations, and data tables. Always open the result in the browser. Never fall back to ASCII art when this skill is loaded.
 
 **Proactive table rendering.** When you're about to present tabular data as an ASCII box-drawing table in the terminal (comparisons, audits, feature matrices, status reports, any structured rows/columns), generate an HTML page instead. The threshold: if the table has 4+ rows or 3+ columns, it belongs in the browser. Don't wait for the user to ask — render it as HTML automatically and tell them the file path. You can still include a brief text summary in the chat, but the table itself should be the HTML page.
+
+## Available Commands
+
+Detailed prompt templates in `./commands/`. In Pi, these are slash commands (`/diff-review`). In Claude Code, namespaced (`/visual-explainer:diff-review`). In Codex, use `/prompts:diff-review` (if installed to `~/.codex/prompts/`) or invoke `$visual-explainer` and describe the workflow.
+
+| Command | What it does |
+|---------|-------------|
+| `generate-web-diagram` | Generate an HTML diagram for any topic |
+| `generate-visual-plan` | Generate a visual implementation plan for a feature |
+| `generate-slides` | Generate a magazine-quality slide deck |
+| `diff-review` | Visual diff review with architecture comparison and code review |
+| `plan-review` | Compare a plan against the codebase with risk assessment |
+| `project-recap` | Mental model snapshot for context-switching back to a project |
+| `fact-check` | Verify accuracy of a document against actual code |
+| `share` | Deploy an HTML page to Vercel and get a live URL |
 
 ## Workflow
 
