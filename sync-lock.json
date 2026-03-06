@@ -22,5 +22,9 @@
   "agents/skills/impeccable-design": {
     "commit": "a9c66c4cdad75877afc2d40c4265fb74d875a27e",
     "hash": "b693884ac6f6bda14f9e8a1c1898d6042cc0d50535e9fb77a38fdb7f1486b2a1"
+  },
+  "agents/commands/visual-explainer": {
+    "commit": "f41c48fd507c95f53151047788662e91def8c673",
+    "hash": "6371e338419d73db932fbb1b244d70388f1b19ee42417826380f371728df50af"
   }
 }

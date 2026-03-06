@@ -288,6 +288,57 @@ For implementation plans and architecture docs, **don't display entire source fi
 
 If someone needs the full file, put it in a collapsible section or link to it.
 
+## Directory Tree
+
+For file structures, use `<pre>` with monospace + `white-space: pre`. Tree connectors (`├──`, `└──`, `│`) only work when vertically aligned — they become noise if text wraps.
+
+```css
+.dir-tree {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.dir-tree .ann { color: var(--text-dim); font-size: 11px; font-style: italic; }
+.dir-tree .hl  { color: var(--accent); font-weight: 600; }
+```
+
+```html
+<pre class="dir-tree">my-project/
+├── src/
+│   ├── <span class="hl">index.ts</span>       <span class="ann">— entry point</span>
+│   ├── services/
+│   │   └── <span class="hl">api.py</span>     <span class="ann">(142 lines)</span>
+│   └── utils/
+├── tests/            <span class="ann">(14 test files)</span>
+└── README.md</pre>
+```
+
+For labeled trees, wrap in a card. For side-by-side comparisons, put two cards in a grid:
+
+```css
+.dir-tree-card { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.dir-tree-card__header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1.5px;
+}
+.dir-tree-card .dir-tree { border: none; border-radius: 0; }
+
+/* Side-by-side: two .dir-tree-card in a grid */
+.dir-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .dir-compare { grid-template-columns: 1fr; } }
+```
+
+**Never** render tree connectors inside wrapping text (`white-space: normal`), flex children, or grid items — the vertical pipes lose alignment and the hierarchy becomes unreadable.
+
 ## Overflow Protection
 
 Grid and flex children default to `min-width: auto`, which prevents them from shrinking below their content width. Long text, inline code badges, and non-wrapping elements will blow out containers.
@@ -555,6 +606,7 @@ CSS `zoom` actually changes the element's layout size. The content grows downwar
     <button onclick="zoomDiagram(this, 1.2)" title="Zoom in">+</button>
     <button onclick="zoomDiagram(this, 0.8)" title="Zoom out">&minus;</button>
     <button onclick="resetZoom(this)" title="Reset zoom">&#8634;</button>
+    <button onclick="openDiagramFullscreen(this)" title="Open full size in new tab">&#x26F6;</button>
   </div>
   <pre class="mermaid">
     graph TD
@@ -562,6 +614,8 @@ CSS `zoom` actually changes the element's layout size. The content grows downwar
   </pre>
 </div>
 ```
+
+**Click to expand.** Clicking anywhere on the diagram (without dragging) opens it full-size in a new tab. The expand button (⛶) in the zoom controls does the same thing.
 
 ### JavaScript
 
@@ -587,6 +641,41 @@ function resetZoom(btn) {
   target.style.zoom = INITIAL_ZOOM;
 }
 
+function openDiagramFullscreen(btn) {
+  var wrap = btn.closest('.mermaid-wrap');
+  openMermaidInNewTab(wrap);
+}
+
+function openMermaidInNewTab(wrap) {
+  var svg = wrap.querySelector('.mermaid svg');
+  if (!svg) return;
+
+  // Clone the SVG and remove any inline transforms from zoom
+  var clone = svg.cloneNode(true);
+  clone.style.zoom = '';
+  clone.style.transform = '';
+
+  // Get computed styles for theming
+  var styles = getComputedStyle(document.documentElement);
+  var bg = styles.getPropertyValue('--bg').trim() || '#ffffff';
+
+  // Build standalone HTML page
+  var html = '<!DOCTYPE html>' +
+    '<html lang="en"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+    '<title>Diagram</title>' +
+    '<style>' +
+    'body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: ' + bg + '; padding: 40px; box-sizing: border-box; }' +
+    'svg { max-width: 100%; max-height: 90vh; height: auto; }' +
+    '</style></head><body>' +
+    clone.outerHTML +
+    '</body></html>';
+
+  var blob = new Blob([html], { type: 'text/html' });
+  var url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+}
+
 document.querySelectorAll('.mermaid-wrap').forEach(function(wrap) {
   // Ctrl/Cmd + scroll to zoom
   wrap.addEventListener('wheel', function(e) {
@@ -600,8 +689,8 @@ document.querySelectorAll('.mermaid-wrap').forEach(function(wrap) {
     target.style.zoom = next;
   }, { passive: false });
 
-  // Click-and-drag to pan
-  var startX, startY, scrollL, scrollT;
+  // Click-and-drag to pan, click (without drag) to open full-size
+  var startX, startY, scrollL, scrollT, startTime, didPan;
   wrap.addEventListener('mousedown', function(e) {
     if (e.target.closest('.zoom-controls')) return;
     wrap.classList.add('is-panning');
@@ -609,19 +698,30 @@ document.querySelectorAll('.mermaid-wrap').forEach(function(wrap) {
     startY = e.clientY;
     scrollL = wrap.scrollLeft;
     scrollT = wrap.scrollTop;
+    startTime = Date.now();
+    didPan = false;
   });
   window.addEventListener('mousemove', function(e) {
     if (!wrap.classList.contains('is-panning')) return;
-    wrap.scrollLeft = scrollL - (e.clientX - startX);
-    wrap.scrollTop = scrollT - (e.clientY - startY);
+    var dx = e.clientX - startX;
+    var dy = e.clientY - startY;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) didPan = true;
+    wrap.scrollLeft = scrollL - dx;
+    wrap.scrollTop = scrollT - dy;
   });
   window.addEventListener('mouseup', function() {
+    if (!wrap.classList.contains('is-panning')) return;
     wrap.classList.remove('is-panning');
+    // If click was quick and didn't move much, open full-size
+    var elapsed = Date.now() - startTime;
+    if (!didPan && elapsed < 300) {
+      openMermaidInNewTab(wrap);
+    }
   });
 });
 ```
 
-Scroll-to-zoom requires Ctrl/Cmd+scroll to avoid hijacking normal page scroll. Cursor changes to `grab`/`grabbing` to signal pan mode. The zoom range is capped at 0.5x–5x.
+Scroll-to-zoom requires Ctrl/Cmd+scroll to avoid hijacking normal page scroll. Cursor changes to `grab`/`grabbing` to signal pan mode. The zoom range is capped at 0.5x–5x. **Clicking without dragging opens the diagram full-size in a new browser tab.**
 
 ## Grid Layouts
 

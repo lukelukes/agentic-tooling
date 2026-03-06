@@ -42,6 +42,7 @@ def bold(s: str) -> str: return f"\033[1m{s}\033[0m" if _COLOR else s
 #   - <path> can be a file or directory
 #   - @<branch> is optional, defaults to "main"
 
+COMMANDS_DIR = "agents/commands"
 SKILLS_DIR = "agents/skills"
 
 MAPPINGS: dict[str, str] = {
@@ -50,7 +51,9 @@ MAPPINGS: dict[str, str] = {
     f"{SKILLS_DIR}/hegelian-dialectic/SKILL.md": "github:KyleAMathews/hegelian-dialectic-skill/SKILL.md@main",
     f"{SKILLS_DIR}/humanizer/SKILL.md": "github:blader/humanizer/SKILL.md@main",
     f"{SKILLS_DIR}/visual-explainer/SKILL.md": "github:nicobailon/visual-explainer/plugins/visual-explainer/SKILL.md@main",
-    f"{SKILLS_DIR}/impeccable-design": "github:pbakaus/impeccable/source/skills@main"
+    f"{SKILLS_DIR}/impeccable-design": "github:pbakaus/impeccable/source/skills@main",
+
+    f"{COMMANDS_DIR}/visual-explainer": "github:nicobailon/visual-explainer/plugins/visual-explainer/commands@main"
 }
 
 
