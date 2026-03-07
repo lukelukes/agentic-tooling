@@ -93,7 +93,7 @@ Spawn both monks as separate subagent sessions. Check for hedging, degenerate fr
 ### Phase 4: Determinate Negation
 **Read `reference/phase4-determinate-negation.md` before executing.**
 
-You perform this yourself (not a subagent). Analyze internal tensions in each essay, then the surface contradiction, shared assumptions, determinate negation, hidden question, Boydian decomposition, and sublation criteria. Write your initial synthesis guess first — compare at the end to check for pattern-matching. **In Round 2+**, includes lateral creativity interventions: compressed conflict generation (oxymorons), random domain injection via Wikipedia's random article API, and a non-propositional pause (three metaphors).
+You perform this yourself (not a subagent). Analyze internal tensions in each essay, then the surface contradiction, shared assumptions, determinate negation, hidden question, Boydian decomposition, and sublation criteria. Write your initial synthesis guess first — compare at the end to check for pattern-matching. **In Round 2+**, includes lateral creativity interventions: compressed conflict generation (oxymorons), random domain injection via Wikipedia's random article API, and a non-propositional pause (three metaphors). **HARD STOP at the end of Phase 4** — present the full analysis to the user and get their response before proceeding to synthesis. This is the highest-leverage correction point in the entire process.
 
 ### Phase 5: Sublation (Aufhebung)
 **Read `reference/phase5-sublation.md` before executing.**
