@@ -34,7 +34,7 @@ Three frameworks drive every phase of this skill. Internalize them before procee
 
 **Hegel: How contradictions resolve.** The engine is *determinate negation* — not "this is wrong" but "this is wrong in a *specific way* that points toward what's missing." The specific failure mode of each position is a signpost. Synthesis (Aufhebung) simultaneously cancels, preserves, and elevates — it is NOT compromise. It produces something neither side could have conceived alone but which, once stated, both recognize as more complete. It is irreversible — genuine cognitive gain. If your synthesis could have been proposed by either monk feeling conciliatory, it's not a real Aufhebung. (See Theoretical Foundations → Hegel.)
 
-**Boyd: How creativity works.** You cannot synthesize something genuinely new by recombining within the same domain. You must first *shatter* existing conceptual wholes into atomic parts (destruction), then find cross-domain connections to build something new (creation). This is why the Boydian decomposition step (Phase 4.5) strips claims from their source positions and looks for surprising connections, and why recursive rounds often need new research from *outside* the original domains — each synthesis creates space for new material to enter. Compromise recombines within the same domain; genuine sublation requires cross-domain connection, which is why it feels like surprise. (See Theoretical Foundations → Boyd.)
+**Boyd: How creativity works — and why going outside is mandatory.** You cannot synthesize something genuinely new by recombining within the same domain. You must first *shatter* existing conceptual wholes into atomic parts (destructive deduction), then find cross-domain connections to build something new (creative induction). Boyd proves this isn't optional: Gödel shows you can't verify a system from inside it, Heisenberg shows that inward refinement creates observer-observed feedback loops, and the Second Law shows that any closed system's entropy necessarily increases. Together: "any inward-oriented and continued effort to improve the match-up of concept with observed reality will only increase the degree of mismatch." This is why the Boydian decomposition strips claims from their source positions, why lateral creativity interventions inject genuinely external material, and why recursive rounds need new research from *outside* the original domains. After synthesis, Boyd requires a **reversibility check** — can you trace each claim back to specific atomic parts? If not, the ideas don't hold together without contradiction. (See Theoretical Foundations → Boyd.)
 
 ## How It Works: Overview
 
@@ -54,10 +54,12 @@ You (Orchestrator)
 │   └── User checkpoint: "Is there evidence or a comparison class both monks missed?"
 ├── Phase 4: Determinate Negation (you — structural analysis, saved to file)
 │   ├── 4.0: Internal tensions — where does each monk's own logic undermine itself?
-│   ├── 4.5: Boydian decomposition — shatter, find cross-domain connections
-│   └── 4.6: Lateral creativity (Round 2+ only) — compressed conflicts, random domain, metaphors
+│   ├── 4.5: Lateral creativity (Round 2+ only) — compressed conflicts, random domain, metaphors
+│   ├── 4.6: Boydian decomposition (destructive deduction) — shatter into "sea of anarchy," find cross-domain connections (creative induction)
+│   └── Same-arrangement test + emergent structure test
 ├── Phase 5: Sublation / Aufhebung (you — synthesis, saved to file)
 │   ├── Provocation + movement (Round 2+ only) — disrupt premature pattern-matching
+│   ├── Reversibility check: trace each claim back to decomposition parts
 │   └── Abduction test: does synthesis make the original contradiction *predictable*?
 ├── Phase 6: Validation (Monks A & B evaluate — were they elevated or defeated?)
 │   ├── Adversarial check: would the hardest-hit monk actually accept this?
@@ -98,17 +100,17 @@ You perform this yourself (not a subagent). Analyze internal tensions in each es
 ### Phase 5: Sublation (Aufhebung)
 **Read `reference/phase5-sublation.md` before executing.**
 
-Generate the synthesis: cancel both positions as complete truths, preserve the genuine insight in each, elevate to a new concept that transforms the question. Apply the abduction test. Check for compromise failure modes — including **analytical capture** (adopting one monk's epistemology to reframe the other) and **level reduction** (dissolving a higher-category claim into lower-category terms). Present to the user before validation. **In Round 2+**, begins with a De Bono provocation + movement extraction to disrupt premature pattern-matching.
+Generate the synthesis: cancel both positions as complete truths, preserve the genuine insight in each, elevate to a new concept that transforms the question. **Reversibility check (Boyd):** trace each claim back to specific atomic parts from the decomposition — untraceable claims need scrutiny. **Same-arrangement test:** verify the synthesis isn't one monk's structure wearing the other's vocabulary. Apply the abduction test. Check for compromise failure modes — including **analytical capture** (adopting one monk's epistemology to reframe the other) and **level reduction** (dissolving a higher-category claim into lower-category terms). Present to the user before validation. **In Round 2+**, begins with a De Bono provocation + movement extraction to disrupt premature pattern-matching.
 
 ### Phase 6: Validation by the Electric Monks
 **Read `reference/phase6-validation.md` before executing.**
 
-Send condensed summary to both monks for validation (elevated vs. defeated). Run adversarial check — including the **proponent test** (would the hardest-hit monk say "you've done exactly the thing I warned against"?). Deploy the hostile auditor (always in Round 2+, optional in Round 1). **Sustained juxtaposition** is a legitimate alternative when the contradiction is more productive held open than resolved. Present improvements to user one at a time, not as a list. Revise synthesis before proceeding to recursion.
+Send condensed summary to both monks for validation (elevated vs. defeated). Run adversarial check — including the **proponent test** (would the hardest-hit monk say "you've done exactly the thing I warned against"?). Deploy the hostile auditor (always in Round 2+, optional in Round 1) — auditor now includes a **reversibility check** (can each synthesis claim trace to material in the essays?) and **same-arrangement test**. **Sustained juxtaposition** is a legitimate alternative when the contradiction is more productive held open than resolved. On failure, **partial salvage** — identify which parts cohere, add new material, iterate (Boyd's approach is surgical, not demolition). Present improvements to user one at a time, not as a list. Revise synthesis before proceeding to recursion.
 
 ### Phase 7: Recursion
 **Read `reference/phase7-recursion.md` before executing.**
 
-Recursion is the engine of the skill — the first round is calibration. Propose 2-4 directions as a menu. Fresh agents are usually better than resumed sessions. New research is often essential as each synthesis opens new conceptual domains. Default: recurse at least once. Track the dialectic queue in a file.
+Recursion is the engine of the skill — the first round is calibration. **You MUST generate an idea burst (5-8 candidates) before clustering into directions** — do not skip this step, it is what prevents predictable/obvious recursion directions. Then cluster into 2-4 directions as a menu. Fresh agents are usually better than resumed sessions. New research is often essential as each synthesis opens new conceptual domains. Default: recurse at least once. Track the dialectic queue in a file.
 
 ## Belief Burden Catalog
 
@@ -247,7 +249,7 @@ The dialectic structure is universal but the vocabulary of "truth" and the groun
 
 ## Theoretical Foundations (Reference)
 
-Read this section to understand WHY the process works the way it does. This informs your judgment when things go off-script. The frameworks are listed in order of operational importance — Rao explains *what the tool is*, Hegel explains *how contradictions resolve*, Boyd explains *how creativity works*, Socrates explains *how to surface the question*, Adams gives *the metaphor*, Aquinas gives *the aspiration*, and DeLong explains *when to use it*.
+Read this section to understand WHY the process works the way it does. This informs your judgment when things go off-script. The frameworks are listed in order of operational importance — Rao explains *what the tool is*, Hegel explains *how contradictions resolve*, Boyd explains *how creativity works and why going outside is mandatory*, Socrates explains *how to surface the question*, Adams gives *the metaphor*, Aquinas gives *the aspiration*, and DeLong explains *when to use it*.
 
 ### Rao: Artificial Belief Systems and Fast Transients
 
@@ -279,15 +281,24 @@ Hegel never used "thesis-antithesis-synthesis" — that framing comes from Ficht
 
 ### Boyd: Destruction and Creation (1976) — The Creative Engine
 
-John Boyd's "Dialectic Engine": destructive deduction (shatter existing conceptual domains, scatter parts into a "sea of anarchy") followed by creative induction (find cross-domain connections to synthesize something new).
+John Boyd's "Dialectic Engine": **destructive deduction** (shatter existing conceptual domains, break the correspondence between each concept and its parts, scatter them into a "sea of anarchy") followed by **creative induction** (find common qualities, attributes, or operations among these scattered parts to synthesize a genuinely new concept). The crucial step is the separation — without unstructuring, creation cannot proceed because the parts are still trapped as meaning within unchallenged domains.
 
-**Boyd's critical insight: you cannot synthesize something genuinely new by recombining within the same domain.** If Monk A and Monk B are both arguing about web frameworks, a synthesis that only recombines claims from their two essays will produce rearrangement, not creation. Genuine novelty requires material from *outside* the original conceptual domains. The destructive step — separating particulars from their previous wholes — creates *space* for outside material to enter and form new connections.
+**Boyd's critical insight: you cannot synthesize something genuinely new by recombining within the same domain.** If Monk A and Monk B are both arguing about web frameworks, a synthesis that only recombines claims from their two essays will produce rearrangement, not creation. Genuine novelty requires material from *outside* the original conceptual domains. The destructive step — separating particulars from their previous wholes — creates *space* for outside material to enter and form new connections. Boyd is explicit: the result must NOT use the parts "in only those same arrangement" as any original domain — that would merely reconstruct what you already had.
 
-Boyd's cycle: **Structure → Unstructure → Restructure** → repeat at higher levels of elaboration.
+**Boyd's three pillars — why going outside is structurally necessary, not merely helpful:**
+1. **Gödel's Incompleteness:** Any consistent system is incomplete; its consistency cannot be demonstrated from within. You must go outside to verify it. Applied: you cannot determine whether a synthesis is consistent by analyzing it with the same concepts that built it.
+2. **Heisenberg's Uncertainty:** When the observer's precision approaches the phenomenon's precision, uncertainty swamps the measurement. Applied: the deeper you refine a concept, the more the concept shapes what you observe — a feedback loop that generates confusion, not clarity.
+3. **Second Law of Thermodynamics:** Entropy increases in any closed system. Applied: any inward-oriented effort to improve a concept's match with reality *necessarily increases the mismatch.* This is why within-domain refinement has diminishing returns and why each recursive round needs new external material — the system must open itself to avoid entropy death.
 
-**Where Boyd is operationally present:** Phase 4.5 (Boydian Decomposition — the destructive step), Phase 5 (Sublation — the creative step requiring cross-domain connection), and Phase 7 (Recursion — each cycle is Boyd's full Structure → Unstructure → Restructure, which is why recursive rounds often need new research from outside the original domains).
+Together: "any inward-oriented and continued effort to improve the match-up of concept with observed reality will only increase the degree of mismatch." The lateral creativity interventions (Phase 4.5) and the requirement for new research in recursive rounds aren't nice-to-have — they're the structural response to a thermodynamic necessity.
 
-**Relationship to Hegel:** Hegel provides the engine for analyzing *how* positions fail (determinate negation) and the concept of what good synthesis looks like (Aufhebung). Boyd provides the engine for *what to do with the wreckage* — shatter, scatter, and recombine with outside material. The two frameworks are complementary: Hegel drives the contradiction analysis, Boyd drives the creative reconstruction.
+**Boyd's verification step — reversibility:** After creative induction, Boyd requires checking internal consistency by tracing back to the original constituents. If you cannot reverse directions — if synthesis claims don't trace to identifiable atomic parts from the decomposition — the ideas don't hold together without contradiction. But partial failure doesn't mean you reject the whole structure: identify which parts cohere, add new material, and try again.
+
+Boyd's cycle: **Structure → Unstructure → Restructure** → repeat endlessly at higher and broader levels of elaboration. The alternating entropy increase (destruction) and decrease (creation) form a control mechanism that drives toward deeper understanding.
+
+**Where Boyd is operationally present:** Phase 4.6 (Boydian Decomposition — the destructive deduction), Phase 5 (Sublation — the creative induction, including the reversibility check), Phase 6 (the auditor's reversibility check), and Phase 7 (Recursion — each cycle is Boyd's full Structure → Unstructure → Restructure, which is why recursive rounds often need new research from outside the original domains).
+
+**Relationship to Hegel:** Hegel provides the engine for analyzing *how* positions fail (determinate negation) and the concept of what good synthesis looks like (Aufhebung). Boyd provides the engine for *what to do with the wreckage* — shatter, scatter, and recombine with outside material. Boyd also provides the theoretical proof for *why* going outside is mandatory (Gödel + Heisenberg + 2nd Law). The two frameworks are complementary: Hegel drives the contradiction analysis, Boyd drives the creative reconstruction.
 
 ### Socratic Elenchus
 
