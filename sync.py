@@ -53,7 +53,7 @@ MAPPINGS: dict[str, str] = {
     f"{SKILLS_DIR}/visual-explainer/SKILL.md": "github:nicobailon/visual-explainer/plugins/visual-explainer/SKILL.md@main",
     f"{SKILLS_DIR}/impeccable-design": "github:pbakaus/impeccable/source/skills@main",
 
-    f"{COMMANDS_DIR}/visual-explainer": "github:nicobailon/visual-explainer/plugins/visual-explainer/commands@main"
+    f"{COMMANDS_DIR}/ext/visual-explainer": "github:nicobailon/visual-explainer/plugins/visual-explainer/commands@main"
 }
 
 

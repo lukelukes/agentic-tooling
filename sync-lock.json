@@ -26,5 +26,9 @@
   "agents/commands/visual-explainer": {
     "commit": "f41c48fd507c95f53151047788662e91def8c673",
     "hash": "6371e338419d73db932fbb1b244d70388f1b19ee42417826380f371728df50af"
+  },
+  "agents/commands/ext/visual-explainer": {
+    "commit": "61f06e818e8fd49a86351d5981dcc6eeeae2f890",
+    "hash": "6371e338419d73db932fbb1b244d70388f1b19ee42417826380f371728df50af"
   }
 }
