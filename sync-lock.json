@@ -30,5 +30,29 @@
   "agents/commands/ext/visual-explainer": {
     "commit": "61f06e818e8fd49a86351d5981dcc6eeeae2f890",
     "hash": "6371e338419d73db932fbb1b244d70388f1b19ee42417826380f371728df50af"
+  },
+  "agents/skills/ext/frontend-design": {
+    "commit": "b0cbd3df1533b396d281a6886d5132f623393a9c",
+    "hash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
+  },
+  "agents/skills/ext/skill-creator": {
+    "commit": "b0cbd3df1533b396d281a6886d5132f623393a9c",
+    "hash": "ad480cdd4a4b5886cb7d35c2055d4b9005babe15d80ace54d90f4259f3bf3257"
+  },
+  "agents/skills/ext/hegelian-dialectic/SKILL.md": {
+    "commit": "aebcc5b4ceec3d67489603e1e374820215390bf9",
+    "hash": "35aaab3c48387701a74e8c50435371c6381df4eefc4621d5b6eb83462596121c"
+  },
+  "agents/skills/ext/humanizer/SKILL.md": {
+    "commit": "d8085c7da5ddb9a179572837d4806b68cde3e9ff",
+    "hash": "52b73cf256fad4165855aca93cc86cbf3aba698b2474b0d7a8e502b2717af1a3"
+  },
+  "agents/skills/ext/visual-explainer/SKILL.md": {
+    "commit": "61f06e818e8fd49a86351d5981dcc6eeeae2f890",
+    "hash": "ffd4e396ccb1b85789c9c5f7b8e1f6b1632dc18de2b17c29b2e6059accd68a54"
+  },
+  "agents/skills/ext/impeccable-design": {
+    "commit": "2bf7fce2d6fcfe26646e8910ced00967321d68c4",
+    "hash": "333bb3c8e2d2048bea40b50caf69c24bea92d9fba06b056d9ee119513d8e6190"
   }
 }

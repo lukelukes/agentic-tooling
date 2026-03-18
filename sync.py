@@ -46,12 +46,12 @@ COMMANDS_DIR = "agents/commands"
 SKILLS_DIR = "agents/skills"
 
 MAPPINGS: dict[str, str] = {
-    f"{SKILLS_DIR}/frontend-design": "github:anthropics/skills/skills/frontend-design@main",
-    f"{SKILLS_DIR}/skill-creator": "github:anthropics/skills/skills/skill-creator@main",
-    f"{SKILLS_DIR}/hegelian-dialectic/SKILL.md": "github:KyleAMathews/hegelian-dialectic-skill/SKILL.md@main",
-    f"{SKILLS_DIR}/humanizer/SKILL.md": "github:blader/humanizer/SKILL.md@main",
-    f"{SKILLS_DIR}/visual-explainer/SKILL.md": "github:nicobailon/visual-explainer/plugins/visual-explainer/SKILL.md@main",
-    f"{SKILLS_DIR}/impeccable-design": "github:pbakaus/impeccable/source/skills@main",
+    f"{SKILLS_DIR}/ext/frontend-design": "github:anthropics/skills/skills/frontend-design@main",
+    f"{SKILLS_DIR}/ext/skill-creator": "github:anthropics/skills/skills/skill-creator@main",
+    f"{SKILLS_DIR}/ext/hegelian-dialectic/SKILL.md": "github:KyleAMathews/hegelian-dialectic-skill/SKILL.md@main",
+    f"{SKILLS_DIR}/ext/humanizer/SKILL.md": "github:blader/humanizer/SKILL.md@main",
+    f"{SKILLS_DIR}/ext/visual-explainer/SKILL.md": "github:nicobailon/visual-explainer/plugins/visual-explainer/SKILL.md@main",
+    f"{SKILLS_DIR}/ext/impeccable-design": "github:pbakaus/impeccable/source/skills@main",
 
     f"{COMMANDS_DIR}/ext/visual-explainer": "github:nicobailon/visual-explainer/plugins/visual-explainer/commands@main"
 }
