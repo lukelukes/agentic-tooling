@@ -54,5 +54,9 @@
   "agents/skills/ext/impeccable-design": {
     "commit": "2bf7fce2d6fcfe26646e8910ced00967321d68c4",
     "hash": "333bb3c8e2d2048bea40b50caf69c24bea92d9fba06b056d9ee119513d8e6190"
+  },
+  "agents/skills/ext/emil-design-eng/SKILL.md": {
+    "commit": "7ebc9b7a6c62a027caf6f4eafede288495c05dda",
+    "hash": "1adef1b8f65f92dfa42e740aa4597b58fd152aaa15e4370148fe625828018bde"
   }
 }

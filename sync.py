@@ -52,6 +52,7 @@ MAPPINGS: dict[str, str] = {
     f"{SKILLS_DIR}/ext/humanizer/SKILL.md": "github:blader/humanizer/SKILL.md@main",
     f"{SKILLS_DIR}/ext/visual-explainer/SKILL.md": "github:nicobailon/visual-explainer/plugins/visual-explainer/SKILL.md@main",
     f"{SKILLS_DIR}/ext/impeccable-design": "github:pbakaus/impeccable/source/skills@main",
+    f"{SKILLS_DIR}/ext/emil-design-eng/SKILL.md": "github:emilkowalski/skill/skills/emil-design-eng/SKILL.md@main",
 
     f"{COMMANDS_DIR}/ext/visual-explainer": "github:nicobailon/visual-explainer/plugins/visual-explainer/commands@main"
 }
