@@ -122,7 +122,7 @@ def github_history_url(owner: str, repo: str, path: str, ref: str) -> str:
 def get_latest_commit(owner: str, repo: str, ref: str) -> str:
     """Get the latest commit SHA on a branch without cloning."""
     result = subprocess.run(
-        ["git", "ls-remote", f"https://github.com/{owner}/{repo}.git", ref],
+        ["git", "ls-remote", f"git@github.com:{owner}/{repo}.git", ref],
         capture_output=True, text=True, check=True,
     )
     for line in result.stdout.strip().splitlines():
@@ -136,7 +136,7 @@ def fetch_remote(
     *, is_commit: bool = False,
 ) -> str:
     """Sparse-checkout a specific path from GitHub into dest. Returns commit SHA."""
-    url = f"https://github.com/{owner}/{repo}.git"
+    url = f"git@github.com:{owner}/{repo}.git"
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp) / "repo"
 
