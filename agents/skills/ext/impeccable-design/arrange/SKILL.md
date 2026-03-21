@@ -5,7 +5,7 @@ args:
   - name: target
     description: The feature or component to improve layout for (optional)
     required: false
-user-invokable: true
+user-invocable: true
 ---
 
 Assess and improve layout and spacing that feels monotonous, crowded, or structurally weak — turning generic arrangements into intentional, rhythmic compositions.

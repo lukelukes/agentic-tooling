@@ -44,16 +44,16 @@
     "hash": "35aaab3c48387701a74e8c50435371c6381df4eefc4621d5b6eb83462596121c"
   },
   "agents/skills/ext/humanizer/SKILL.md": {
-    "commit": "d8085c7da5ddb9a179572837d4806b68cde3e9ff",
-    "hash": "52b73cf256fad4165855aca93cc86cbf3aba698b2474b0d7a8e502b2717af1a3"
+    "commit": "12881abf6671c4ab62eceeb56f911b752f9fd6d2",
+    "hash": "5d732eb2e367ced550d77a6f1ecd33d97cfe5b871a06d1f9ed385a4cf19e02f3"
   },
   "agents/skills/ext/visual-explainer/SKILL.md": {
     "commit": "61f06e818e8fd49a86351d5981dcc6eeeae2f890",
     "hash": "ffd4e396ccb1b85789c9c5f7b8e1f6b1632dc18de2b17c29b2e6059accd68a54"
   },
   "agents/skills/ext/impeccable-design": {
-    "commit": "2bf7fce2d6fcfe26646e8910ced00967321d68c4",
-    "hash": "333bb3c8e2d2048bea40b50caf69c24bea92d9fba06b056d9ee119513d8e6190"
+    "commit": "cd919235c1c16d29903dc73f87f42ab85db41891",
+    "hash": "2547c5b3fba54d2be73198a724e93a175c51e4f7b88572ce54e53e40ac6f0cfe"
   },
   "agents/skills/ext/emil-design-eng/SKILL.md": {
     "commit": "7ebc9b7a6c62a027caf6f4eafede288495c05dda",

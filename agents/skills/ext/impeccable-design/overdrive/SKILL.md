@@ -5,7 +5,7 @@ args:
   - name: target
     description: The feature or area to push into overdrive (optional)
     required: false
-user-invokable: true
+user-invocable: true
 ---
 
 Start your response with:
