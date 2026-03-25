@@ -52,11 +52,11 @@
     "hash": "ffd4e396ccb1b85789c9c5f7b8e1f6b1632dc18de2b17c29b2e6059accd68a54"
   },
   "agents/skills/ext/impeccable-design": {
-    "commit": "cd919235c1c16d29903dc73f87f42ab85db41891",
-    "hash": "2547c5b3fba54d2be73198a724e93a175c51e4f7b88572ce54e53e40ac6f0cfe"
+    "commit": "727f0a661e03ecc7d235ab4192399920858c69f6",
+    "hash": "56d9e18d15010540197a3e6c9b9f1aa82007045b30f7a41c7f254329f66f76d5"
   },
   "agents/skills/ext/emil-design-eng/SKILL.md": {
-    "commit": "7ebc9b7a6c62a027caf6f4eafede288495c05dda",
-    "hash": "1adef1b8f65f92dfa42e740aa4597b58fd152aaa15e4370148fe625828018bde"
+    "commit": "ecf66bbd1fb33c25332b6b0e454d08049978284c",
+    "hash": "433b5a239cda18e0576e4e558532e7e53512e21fafe5b85db4894c28ec399b72"
   }
 }
