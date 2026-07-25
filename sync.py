@@ -30,6 +30,7 @@ import argparse
 import json
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent
@@ -137,13 +138,140 @@ def not_yet(name: str) -> int:
     return 1
 
 
+def tilde(path: Path) -> str:
+    """~/.claude/skills/diataxis reads better than the absolute path."""
+    try:
+        return "~/" + str(path.relative_to(HOME))
+    except ValueError:
+        return str(path)
+
+
 # --------------------------------------------------------------------------
-# subcommands
+# symlink fan-out
 # --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Link:
+    src: Path  # what this repo owns
+    dst: Path  # where an agent tool looks for it
+
+
+def link_plan() -> list[Link]:
+    """Every symlink this repo wants to exist.
+
+    Loose skills reach all three roots. Agents are Claude-Code-only — ~/.agents and
+    ~/.cursor have no equivalent concept.
+
+    A plugin is linked as a *directory* into ~/.claude/skills, which is what makes it
+    a skills-dir plugin and gives it a /namespace:command prefix. The other two roots
+    do not understand plugin namespacing, so they get the plugin's individual skills
+    instead; that is what "everything reaches Cursor too" means for a plugin.
+    """
+    plan: list[Link] = []
+
+    for skill in own_skills():
+        for root in SKILL_ROOTS:
+            plan.append(Link(skill, root / skill.name))
+
+    for agent in own_agents():
+        plan.append(Link(agent, CLAUDE_AGENTS / agent.name))
+
+    for plugin in own_plugins():
+        plan.append(Link(plugin, CLAUDE_SKILLS / plugin.name))
+        for skill in plugin_skills(plugin):
+            for root in (AGENTS_SKILLS, CURSOR_SKILLS):
+                plan.append(Link(skill, root / skill.name))
+
+    return plan
+
+
+def is_ours(path: Path) -> bool:
+    """True if `path` points inside this repo or Claude Code's plugin cache.
+
+    These are the only two places whose links we may remove or repoint. Anything
+    else in a target root belongs to another tool — ui.sh's skills, for instance.
+    Resolution is deliberately non-strict so a *dangling* link still classifies.
+    """
+    resolved = Path(os.path.normpath(path))
+    for owned in (REPO, PLUGIN_CACHE):
+        if resolved == owned or owned in resolved.parents:
+            return True
+    return False
+
+
+# What we found at a link's destination, and therefore what we may do about it.
+LINKED = "linked"  # already correct
+CREATE = "create"  # nothing there
+REPOINT = "repoint"  # our link, wrong target
+BLOCKED_FILE = "blocked-file"  # a real file or directory
+BLOCKED_LINK = "blocked-link"  # someone else's symlink
+
+
+def classify(link: Link) -> str:
+    dst = link.dst
+    if not dst.is_symlink() and not dst.exists():
+        return CREATE
+    if dst.is_symlink():
+        target = Path(os.path.normpath(dst.parent / os.readlink(dst)))
+        if target == link.src:
+            return LINKED
+        return REPOINT if is_ours(target) else BLOCKED_LINK
+    return BLOCKED_FILE
+
+
+def apply_link(link: Link, state: str, dry_run: bool) -> None:
+    if dry_run:
+        return
+    link.dst.parent.mkdir(parents=True, exist_ok=True)
+    if state == REPOINT:
+        link.dst.unlink()
+    link.dst.symlink_to(link.src, target_is_directory=link.src.is_dir())
 
 
 def cmd_link(args: argparse.Namespace) -> int:
-    return not_yet("link")
+    plan = link_plan()
+    if not plan:
+        print("nothing to link — this repo owns no skills, agents or plugins yet")
+        return 0
+
+    counts = {LINKED: 0, CREATE: 0, REPOINT: 0}
+    blocked: list[tuple[Link, str]] = []
+
+    for link in plan:
+        state = classify(link)
+        if state in (BLOCKED_FILE, BLOCKED_LINK):
+            blocked.append((link, state))
+            continue
+        if state in (CREATE, REPOINT):
+            apply_link(link, state, args.dry_run)
+            verb = "would link" if args.dry_run else ("linked" if state == CREATE else "repointed")
+            print(f"  {ok(verb):<22} {tilde(link.dst)} -> {link.src.relative_to(REPO)}")
+        counts[state] += 1
+
+    for link, state in blocked:
+        what = "real file" if state == BLOCKED_FILE else "foreign symlink"
+        print(f"  {bad('collision'):<22} {tilde(link.dst)} {dim(f'({what}, left alone)')}")
+
+    changed = counts[CREATE] + counts[REPOINT]
+    summary = f"{counts[LINKED]} already linked, {changed} changed"
+    if blocked:
+        summary += f", {len(blocked)} collisions"
+    print(summary)
+
+    if blocked:
+        print(
+            dim(
+                "\nCollisions are reported, never resolved. Remove the file yourself if you\n"
+                "want this repo's copy to win — see ./sync.py status for what owns what."
+            )
+        )
+    return 0
+
+
+# --------------------------------------------------------------------------
+# subcommands
+# --------------------------------------------------------------------------
 
 
 def cmd_status(args: argparse.Namespace) -> int:
