@@ -851,8 +851,60 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def print_patch(patch: str) -> None:
+    for line in patch.split("\n"):
+        if line.startswith("@@"):
+            print("    " + _c("36", line))
+        elif line.startswith("+"):
+            print("    " + ok(line))
+        elif line.startswith("-"):
+            print("    " + bad(line))
+        else:
+            print("    " + line)
+
+
 def cmd_diff(args: argparse.Namespace) -> int:
-    return not_yet("diff")
+    (up,) = upstreams([args.plugin]) or [None]
+    if up is None:
+        print(bad(f"{args.plugin} has no remote to diff — it is vendored"))
+        return 1
+    if not have_gh():
+        print(bad("diff needs gh: the patch comes from the compare API, not a clone"))
+        return 1
+
+    comp = compare(up)
+    if comp.error:
+        print(bad(comp.error))
+        return 1
+    if not comp.behind:
+        print(f"{ok('up to date')} {up.name} at {up.sha[:7]}")
+        return 0
+
+    scope = up.subpath or "the whole repo"
+    print(_c("1", f"{up.name}  {up.sha[:7]}..{comp.head[:7]}"))
+    print(dim(f"  {comp.commits} commits upstream; showing {scope}"))
+    print(dim(f"  {comp.url}\n"))
+
+    if not comp.files:
+        print(dim(f"  nothing under {scope} changed — safe to accept with ./sync.py update"))
+        return 0
+
+    for entry in comp.files:
+        status = entry.get("status", "modified")
+        paint = {"added": ok, "removed": bad, "renamed": warn}.get(status, warn)
+        counts = dim(f"+{entry.get('additions', 0)} -{entry.get('deletions', 0)}")
+        print(f"  {paint(status):<20}{entry.get('filename', '?')}  {counts}")
+        patch = entry.get("patch")
+        if patch:
+            print_patch(patch)
+        else:
+            # No patch means binary, or a file GitHub judged too large to inline.
+            print(dim("    (no inline patch — binary or too large; see the URL above)"))
+        print()
+
+    if comp.truncated:
+        print(dim("  upstream file list capped at 300; the URL above is complete"))
+    return 0
 
 
 def cmd_update(args: argparse.Namespace) -> int:
