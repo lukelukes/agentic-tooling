@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace-manifest.json",
+  "name": "luke",
+  "description": "Third-party skills and plugins this setup consumes, each pinned to a reviewed commit.",
+  "owner": {
+    "name": "Luke Lukes"
+  },
+  "renames": {},
+  "plugins": [
+    {
+      "name": "impeccable",
+      "description": "Design-engineering commands for building interfaces that survive a critical eye.",
+      "source": {
+        "source": "git-subdir",
+        "url": "pbakaus/impeccable",
+        "path": "plugin",
+        "ref": "main",
+        "sha": "af78b1e512148e2a2f2d2ded6786d265ea420191"
+      }
+    },
+    {
+      "name": "visual-explainer",
+      "description": "Turns an explanation into a diagram or an illustrated walkthrough.",
+      "source": {
+        "source": "git-subdir",
+        "url": "nicobailon/visual-explainer",
+        "path": "plugins/visual-explainer",
+        "ref": "main",
+        "sha": "528b71feb85dab5d92b82c3554880826f50a75da"
+      }
+    },
+    {
+      "name": "humanizer",
+      "description": "Strips the tells of generated prose out of a draft.",
+      "source": {
+        "source": "github",
+        "repo": "blader/humanizer",
+        "ref": "main",
+        "sha": "523374dee72d67c7b2b5f858ea0094ffda49c3ac"
+      }
+    },
+    {
+      "name": "hegelian-dialectic",
+      "description": "Thesis, antithesis, synthesis as a structured way through a hard decision.",
+      "source": {
+        "source": "github",
+        "repo": "KyleAMathews/hegelian-dialectic-skill",
+        "ref": "main",
+        "sha": "4812a83ab03c1fa9ee3274d493411087c06bac86"
+      }
+    },
+    {
+      "name": "emil-design-eng",
+      "description": "Emil Kowalski's design-engineering taste: motion, interaction detail, restraint.",
+      "source": {
+        "source": "git-subdir",
+        "url": "emilkowalski/skill",
+        "path": "skills/emil-design-eng",
+        "ref": "main",
+        "sha": "e695d13cb298db0f46d5ef05be2ad13fa12908a6"
+      }
+    },
+    {
+      "name": "frontend-design",
+      "description": "Anthropic's frontend design skill: layout, hierarchy and visual polish.",
+      "source": {
+        "source": "git-subdir",
+        "url": "anthropics/skills",
+        "path": "skills/frontend-design",
+        "ref": "main",
+        "sha": "b29e7cf65e5cb78a5ac33d582270551bc74a14eb"
+      }
+    },
+    {
+      "name": "skill-creator",
+      "description": "Anthropic's skill for authoring, evaluating and tightening other skills.",
+      "source": {
+        "source": "git-subdir",
+        "url": "anthropics/skills",
+        "path": "skills/skill-creator",
+        "ref": "main",
+        "sha": "b29e7cf65e5cb78a5ac33d582270551bc74a14eb"
+      }
+    }
+  ]
+}
