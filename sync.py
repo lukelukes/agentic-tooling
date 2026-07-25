@@ -29,9 +29,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from concurrent import futures
+from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent
@@ -643,8 +645,210 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------
+# upstream
+# --------------------------------------------------------------------------
+#
+# Everything that talks to GitHub. The unit of work is a marketplace entry
+# resolved to (repo, ref, pinned sha, consumed subpath) — the subpath is what
+# makes a review of impeccable readable rather than a wall of 900 filenames.
+
+
+@dataclass(frozen=True)
+class Upstream:
+    name: str
+    repo: str  # owner/name
+    ref: str  # the branch we compare against
+    sha: str  # what we are pinned to
+    subpath: str | None  # the slice we consume; None means the whole repo
+
+
+def entry_upstream(entry: dict) -> Upstream | None:
+    """An entry's upstream coordinates, or None if it has no remote to check.
+
+    A string `source` is a relative path — a vendored entry, whose content is
+    checked in and therefore cannot drift on its own.
+    """
+    source = entry.get("source")
+    if not isinstance(source, dict):
+        return None
+    kind = source.get("source")
+    if kind == "github":
+        repo, subpath = source.get("repo", ""), None
+    elif kind == "git-subdir":
+        repo, subpath = source.get("url", ""), source.get("path") or None
+    else:
+        return None
+    ref, sha = source.get("ref"), source.get("sha")
+    if not (repo and ref and sha):
+        return None
+    return Upstream(entry["name"], repo, ref, sha, subpath)
+
+
+def upstreams(names: list[str] | None = None) -> list[Upstream]:
+    """The entries to act on, or all of them. Unknown names are an error, not a no-op."""
+    entries = {e["name"]: e for e in marketplace_entries()}
+    if names:
+        unknown = [n for n in names if n not in entries]
+        if unknown:
+            raise SystemExit(bad(f"no such marketplace entry: {', '.join(unknown)}"))
+        wanted = [entries[n] for n in names]
+    else:
+        wanted = list(entries.values())
+    return [u for u in (entry_upstream(e) for e in wanted) if u]
+
+
+def have_gh() -> bool:
+    return shutil.which("gh") is not None
+
+
+def gh_api(path: str) -> tuple[dict | None, str]:
+    """GET a GitHub API path through `gh`. Returns (payload, error message)."""
+    try:
+        proc = subprocess.run(
+            ["gh", "api", path], capture_output=True, text=True, timeout=120
+        )
+    except FileNotFoundError:
+        return None, "gh is not installed"
+    except subprocess.SubprocessError as exc:
+        return None, str(exc)
+    if proc.returncode != 0:
+        return None, proc.stderr.strip().split("\n")[-1] or f"gh exited {proc.returncode}"
+    try:
+        return json.loads(proc.stdout), ""
+    except json.JSONDecodeError as exc:
+        return None, f"unreadable response: {exc}"
+
+
+def ls_remote(repo: str, ref: str) -> tuple[str, str]:
+    """The sha `ref` currently points at, without gh. Returns (sha, error)."""
+    try:
+        proc = subprocess.run(
+            ["git", "ls-remote", f"https://github.com/{repo}.git", ref],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return "", str(exc)
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return "", proc.stderr.strip().split("\n")[-1] or "ref not found"
+    return proc.stdout.split()[0], ""
+
+
+@dataclass
+class Comparison:
+    """`compare/{base}...{head}`, with the file list narrowed to what we consume."""
+
+    up: Upstream
+    head: str = ""  # what ref points at now
+    commits: int = 0
+    files: list[dict] = field(default_factory=list)  # already filtered
+    total_files: int = 0  # before filtering
+    truncated: bool = False
+    error: str = ""
+
+    @property
+    def behind(self) -> bool:
+        return bool(self.head) and self.head != self.up.sha
+
+    @property
+    def relevant(self) -> bool:
+        """Behind upstream *in a way that reaches us*."""
+        return self.behind and bool(self.files or self.up.subpath is None)
+
+    @property
+    def url(self) -> str:
+        return f"https://github.com/{self.up.repo}/compare/{self.up.sha}...{self.head}"
+
+
+def consumed(up: Upstream, filename: str) -> bool:
+    if up.subpath is None:
+        return True
+    return filename == up.subpath or filename.startswith(up.subpath.rstrip("/") + "/")
+
+
+def compare(up: Upstream) -> Comparison:
+    """One entry's drift. Network; safe to call concurrently."""
+    if not have_gh():
+        head, err = ls_remote(up.repo, up.ref)
+        return Comparison(up, head=head, error=err)
+
+    payload, err = gh_api(f"repos/{up.repo}/compare/{up.sha}...{up.ref}")
+    if payload is None:
+        return Comparison(up, error=err)
+
+    head = (payload.get("commits") or [{}])[-1].get("sha") or up.sha
+    files = payload.get("files") or []
+    return Comparison(
+        up,
+        head=head,
+        commits=payload.get("total_commits", 0),
+        files=[f for f in files if consumed(up, f.get("filename", ""))],
+        total_files=len(files),
+        # The compare API stops listing files at 300; the commit count stays right.
+        truncated=len(files) >= 300,
+    )
+
+
+def compare_all(ups: list[Upstream]) -> list[Comparison]:
+    """Concurrently, because six sequential round trips is the whole runtime."""
+    if not ups:
+        return []
+    with futures.ThreadPoolExecutor(max_workers=min(8, len(ups))) as pool:
+        return list(pool.map(compare, ups))
+
+
 def cmd_check(args: argparse.Namespace) -> int:
-    return not_yet("check")
+    ups = upstreams(args.plugin)
+    if not ups:
+        print(dim("no marketplace entry has a remote to check"))
+        return 0
+
+    if not have_gh():
+        print(
+            dim(
+                "gh is not installed — falling back to `git ls-remote`, which can say\n"
+                "whether an entry moved but not what changed in it.\n"
+            )
+        )
+
+    behind = 0
+    for comp in compare_all(ups):
+        up = comp.up
+        if comp.error:
+            print(f"  {bad('error'):<22}{up.name:<26}{dim(comp.error)}")
+            continue
+        if not comp.behind:
+            print(f"  {ok('up to date'):<22}{up.name:<26}{dim(up.sha[:7])}")
+            continue
+
+        behind += 1
+        moved = f"{up.sha[:7]}..{comp.head[:7]}"
+        if not have_gh():
+            print(f"  {warn('behind'):<22}{up.name:<26}{dim(moved)}")
+            continue
+
+        count = f"{comp.commits} commit{'s' if comp.commits != 1 else ''}"
+        if up.subpath and not comp.files:
+            # Behind, but every one of those commits landed outside our slice.
+            note = f"{count}, none touching {up.subpath}"
+            print(f"  {dim('behind elsewhere'):<22}{up.name:<26}{dim(moved)}  {dim(note)}")
+            continue
+
+        scope = f"{len(comp.files)} file{'s' if len(comp.files) != 1 else ''}"
+        if up.subpath:
+            scope += f" under {up.subpath}"
+            if comp.total_files != len(comp.files):
+                scope += dim(f" (of {comp.total_files} total)")
+        note = f"{count}, {scope}"
+        print(f"  {warn('behind'):<22}{up.name:<26}{dim(moved)}  {note}")
+        if comp.truncated:
+            print(dim(f"  {'':<22}{'':<26}upstream file list capped at 300"))
+
+    if behind:
+        print(dim(f"\n./sync.py diff <name> to read one; ./sync.py update <name> to accept it."))
+    return 0
 
 
 def cmd_diff(args: argparse.Namespace) -> int:
@@ -681,6 +885,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_status.set_defaults(func=cmd_status)
 
     p_check = sub.add_parser("check", help="which entries are behind upstream [network]")
+    p_check.add_argument("plugin", nargs="*", help="default: every entry")
     p_check.set_defaults(func=cmd_check)
 
     p_diff = sub.add_parser("diff", help="upstream patch, filtered to what we consume [network]")
