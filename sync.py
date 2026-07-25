@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +48,10 @@ HOME = Path.home()
 # Claude Code reads skills from ~/.claude/skills and agents from ~/.claude/agents.
 CLAUDE_SKILLS = HOME / ".claude" / "skills"
 CLAUDE_AGENTS = HOME / ".claude" / "agents"
+# Commands were merged into skills: both produce /name and draw on the same
+# listing budget. Nothing is linked here — it is read for the budget report, and
+# is empty once Phase 4 has converted everything.
+CLAUDE_COMMANDS = HOME / ".claude" / "commands"
 # The cross-tool roots. ~/.agents is the shared convention; ~/.cursor is Cursor's.
 AGENTS_SKILLS = HOME / ".agents" / "skills"
 CURSOR_SKILLS = HOME / ".cursor" / "skills"
@@ -316,8 +321,220 @@ def cmd_link(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------
 
 
+# --------------------------------------------------------------------------
+# skill listing budget
+# --------------------------------------------------------------------------
+#
+# Claude Code loads every skill's name and description into every session. The
+# budget is a fraction of the context window, and when it overflows descriptions
+# are dropped starting with the skills you invoke least — silent degradation with
+# /doctor as the only signal. So the number is worth keeping in front of you.
+
+
+def parse_frontmatter(path: Path) -> tuple[dict[str, str], str]:
+    """Minimal YAML front matter reader. Returns (fields, body).
+
+    Deliberately not a YAML parser: skill front matter is flat scalars, and taking
+    a dependency to read it would defeat the point of a stdlib script. Block
+    scalars (`|`, `>`) are folded to a single line, which is all the caller needs.
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}, ""
+    if not text.startswith("---"):
+        return {}, text
+
+    _, _, rest = text.partition("\n")
+    raw, sep, body = rest.partition("\n---")
+    if not sep:
+        return {}, text
+    body = body.partition("\n")[2]
+
+    fields: dict[str, str] = {}
+    key: str | None = None
+    for line in raw.split("\n"):
+        if line[:1] in (" ", "\t") and key:  # continuation of a block scalar
+            fields[key] = (fields[key] + " " + line.strip()).strip()
+            continue
+        name, colon, value = line.partition(":")
+        if not colon:
+            continue
+        key = name.strip()
+        value = value.strip()
+        if value in ("|", ">", "|-", ">-"):
+            value = ""
+        fields[key] = value.strip("'\"")
+    return fields, body
+
+
+def listing_text(path: Path) -> tuple[str, str, bool]:
+    """(name, description, suppressed) exactly as the skill listing would see it."""
+    fields, body = parse_frontmatter(path)
+    # A skill is named by its directory; a command by its own filename.
+    fallback = path.parent.name if path.name == "SKILL.md" else path.stem
+    name = fields.get("name") or fallback
+    description = fields.get("description", "")
+    if not description:
+        # No description means the first paragraph of the body is used instead,
+        # which is how /brainstorm came to contribute 323 chars of "You are a
+        # brainstorming partner designed to...".
+        for para in body.split("\n\n"):
+            para = para.strip()
+            if para and not para.startswith("#"):
+                description = " ".join(para.split())
+                break
+    suppressed = fields.get("disable-model-invocation", "").lower() == "true"
+    return name, description, suppressed
+
+
+def listed_skills() -> list[tuple[str, int, bool, str]]:
+    """Every skill Claude Code would list: (label, chars, suppressed, origin)."""
+    out: list[tuple[str, int, bool, str]] = []
+    seen: set[Path] = set()
+
+    def add(skill_md: Path, origin: str) -> None:
+        real = skill_md.resolve()
+        if real in seen:  # a symlinked skill reachable from two roots counts once
+            return
+        seen.add(real)
+        name, description, suppressed = listing_text(skill_md)
+        out.append((name, len(name) + len(description), suppressed, origin))
+
+    if CLAUDE_SKILLS.is_dir():
+        for entry in sorted(CLAUDE_SKILLS.iterdir()):
+            if (entry / "SKILL.md").is_file():
+                add(entry / "SKILL.md", "~/.claude/skills")
+            # A skills-dir plugin holds its skills one level down.
+            for nested in sorted((entry / "skills").glob("*/SKILL.md")):
+                add(nested, f"{entry.name}@skills-dir")
+
+    # Commands were merged into skills, so they draw on the same budget — and
+    # they are the expensive half, because almost none of them has a description.
+    if CLAUDE_COMMANDS.is_dir():
+        for command in sorted(CLAUDE_COMMANDS.rglob("*.md")):
+            add(command, "~/.claude/commands")
+
+    for plugin in installed_plugins():
+        if not plugin.get("enabled"):
+            continue
+        root = Path(plugin.get("installPath", ""))
+        if not root.is_dir():
+            continue
+        for skill_md in sorted(root.rglob("SKILL.md")):
+            add(skill_md, plugin["id"])
+
+    return out
+
+
+def installed_plugins() -> list[dict]:
+    """`claude plugin list --json`. A subprocess, but never a network call."""
+    try:
+        proc = subprocess.run(
+            ["claude", "plugin", "list", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if proc.returncode != 0:
+        return []
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return []
+
+
+# --------------------------------------------------------------------------
+# status
+# --------------------------------------------------------------------------
+
+
 def cmd_status(args: argparse.Namespace) -> int:
-    return not_yet("status")
+    plan = link_plan()
+    by_src: dict[Path, dict[Path, str]] = {}
+    for link in plan:
+        by_src.setdefault(link.src, {})[link.dst.parent] = classify(link)
+
+    # Pad first, colour second — an escape code inside a format spec silently
+    # inflates the field width and shears the table.
+    marks = {
+        LINKED: ("link", ok),
+        CREATE: ("--", warn),
+        REPOINT: ("moved", warn),
+        BLOCKED_FILE: ("file!", bad),
+        BLOCKED_LINK: ("other", bad),
+    }
+
+    def cell(state: str, width: int = 12) -> str:
+        text, paint = marks.get(state, ("?", dim))
+        return paint(f"{text:<{width}}")
+
+    print(_c("1", "own components"))
+    print(dim(f"  {'':<26}{'~/.claude':<12}{'~/.agents':<12}{'~/.cursor':<12}"))
+    for src in sorted(by_src, key=lambda p: (p.parent != SKILLS_DIR, p.name)):
+        states = by_src[src]
+        if CLAUDE_AGENTS in states:  # agents live in one root only
+            cells = cell(states[CLAUDE_AGENTS]) + dim("(agent, ~/.claude only)")
+        else:
+            cells = "".join(cell(states.get(root, CREATE)) for root in SKILL_ROOTS)
+        print(f"  {src.name:<26}{cells}")
+
+    print()
+    print(_c("1", "marketplace entries"))
+    entries = marketplace_entries()
+    if not entries:
+        print(dim(f"  none — {tilde(MARKETPLACE)} not written yet"))
+    else:
+        installed = {p["id"].split("@")[0]: p for p in installed_plugins()}
+        for entry in entries:
+            got = installed.get(entry["name"])
+            if got:
+                state = ok("enabled") if got.get("enabled") else warn("disabled")
+                version = got.get("version", "?")
+            else:
+                state, version = bad("not installed"), "-"
+            print(f"  {entry['name']:<26}{version:<26}{state}")
+
+    print()
+    print(_c("1", "other plugins installed"))
+    names = {e["name"] for e in entries}
+    others = [p for p in installed_plugins() if p["id"].split("@")[0] not in names]
+    if not others:
+        print(dim("  none"))
+    for plugin in others:
+        state = ok("enabled") if plugin.get("enabled") else dim("disabled")
+        print(f"  {plugin['id']:<44}{plugin.get('version', '?'):<12}{state}")
+
+    print()
+    print(_c("1", "not ours, in the target roots"))
+    wanted = {link.dst for link in plan}
+    foreign: list[str] = []
+    for root in (*SKILL_ROOTS, CLAUDE_AGENTS):
+        if not root.is_dir():
+            continue
+        for entry in sorted(root.iterdir()):
+            if entry in wanted:
+                continue
+            kind = "symlink elsewhere" if entry.is_symlink() else "real"
+            foreign.append(f"  {tilde(entry):<48}{dim(kind)}")
+    print("\n".join(foreign) if foreign else dim("  none"))
+
+    print()
+    print(_c("1", "skill listing budget"))
+    listed = listed_skills()
+    counted = [s for s in listed if not s[2]]
+    total = sum(s[1] for s in counted)
+    hidden = len(listed) - len(counted)
+    print(f"  {total:,} chars across {len(counted)} listed entries")
+    if hidden:
+        print(dim(f"  {hidden} more suppressed by disable-model-invocation, costing nothing"))
+    print(dim("  top contributors:"))
+    for name, chars, _, origin in sorted(counted, key=lambda s: -s[1])[:8]:
+        print(f"    {chars:>5}  {name:<28}{dim(origin)}")
+    print(dim("\n  An estimate of what /doctor and the /context Skills row report."))
+    return 0
 
 
 def cmd_check(args: argparse.Namespace) -> int:
