@@ -99,6 +99,47 @@ def plugin_skills(plugin: Path) -> list[Path]:
     return sorted(d for d in skills.iterdir() if (d / "SKILL.md").is_file())
 
 
+def cache_link_name(plugin: str, skill: Path, root: Path) -> str:
+    """What to call a third-party skill in the flat cross-tool roots.
+
+    A single-skill plugin keeps SKILL.md at its root, and that root directory is
+    named after the *version* (`4812a83ab03c`), so the plugin name is the only
+    usable label. A multi-skill plugin gets `<plugin>-<skill>`, the same prefixing
+    our own plugins get — except when the two are equal, which would otherwise
+    produce `impeccable-impeccable`.
+    """
+    if skill == root:
+        return plugin
+    return skill.name if skill.name == plugin else f"{plugin}-{skill.name}"
+
+
+def plugin_cache_skills() -> list[tuple[str, Path]]:
+    """(link name, skill directory) for every skill in an installed, enabled plugin.
+
+    Deliberately *not* linked into ~/.claude/skills: Claude Code already loads
+    these from the plugin itself, and a copy there would list the same skill
+    twice. ~/.agents and ~/.cursor have no plugin mechanism, so a link is the
+    only way those tools see them at all.
+
+    Disabled plugins are skipped. Disabling is how the plan says to decline a
+    plugin's listing cost without uninstalling it, so it should mean the skill
+    is gone from every tool, not just this one.
+    """
+    out: list[tuple[str, Path]] = []
+    for plugin in installed_plugins():
+        if not plugin.get("enabled"):
+            continue
+        root = Path(plugin.get("installPath", ""))
+        # Our own plugins are installed from a symlink in ~/.claude/skills, not
+        # from the cache; own_plugins() already fans their skills out.
+        if not root.is_dir() or PLUGIN_CACHE not in root.parents:
+            continue
+        name = plugin["id"].split("@")[0]
+        for skill_md in sorted(root.rglob("SKILL.md")):
+            out.append((cache_link_name(name, skill_md.parent, root), skill_md.parent))
+    return out
+
+
 def load_marketplace() -> dict:
     """The third-party tracking artifact. Absent is not an error — it arrives in Phase 5."""
     if not MARKETPLACE.is_file():
@@ -151,6 +192,14 @@ def tilde(path: Path) -> str:
         return str(path)
 
 
+def source_label(path: Path) -> str:
+    """A link's target, short: repo-relative for ours, ~-relative for the cache."""
+    try:
+        return str(path.relative_to(REPO))
+    except ValueError:
+        return tilde(path)
+
+
 # --------------------------------------------------------------------------
 # symlink fan-out
 # --------------------------------------------------------------------------
@@ -162,8 +211,8 @@ class Link:
     dst: Path  # where an agent tool looks for it
 
 
-def link_plan() -> list[Link]:
-    """Every symlink this repo wants to exist.
+def own_link_plan() -> list[Link]:
+    """Every symlink this repo's *own* components want.
 
     Loose skills reach all three roots. Agents are Claude-Code-only — ~/.agents and
     ~/.cursor have no equivalent concept.
@@ -195,6 +244,19 @@ def link_plan() -> list[Link]:
                 plan.append(Link(skill, root / f"{plugin.name}-{skill.name}"))
 
     return plan
+
+
+def cache_link_plan() -> list[Link]:
+    """Every symlink the installed third-party plugins want, in the two flat roots."""
+    return [
+        Link(skill, root / name)
+        for name, skill in plugin_cache_skills()
+        for root in (AGENTS_SKILLS, CURSOR_SKILLS)
+    ]
+
+
+def link_plan() -> list[Link]:
+    return own_link_plan() + cache_link_plan()
 
 
 def is_ours(path: Path) -> bool:
@@ -248,14 +310,16 @@ def prune_candidates(plan: list[Link]) -> list[tuple[Path, str]]:
     * **dangling** — the link's target is gone. For the plugin cache this is the
       normal aftermath of `claude plugin update`, because the cache path carries
       the version; it is why `update` has to call `link`.
-    * **stale** — a live link into this repo that the plan no longer contains,
-      which is what a renamed or deleted skill leaves behind.
+    * **stale** — a live link into this repo or the cache that the plan no longer
+      contains: a renamed or deleted skill, or a plugin that has since been
+      disabled or uninstalled.
 
-    A live link into the plugin cache is never pruned as stale: third-party links
-    are added to the plan by a later phase, and being conservative here costs a
-    dangling link at worst while the alternative deletes working ones.
+    Stale pruning of cache links is skipped entirely when `claude plugin list`
+    could not be read, because an empty plan there is indistinguishable from
+    "every plugin is gone" and would take out every working third-party link.
     """
     wanted = {link.dst for link in plan}
+    prune_cache = plugin_query_ok()
     found: list[tuple[Path, str]] = []
 
     for root in (*SKILL_ROOTS, CLAUDE_AGENTS):
@@ -269,7 +333,9 @@ def prune_candidates(plan: list[Link]) -> list[tuple[Path, str]]:
                 continue
             if not target.exists():
                 found.append((entry, "dangling"))
-            elif entry not in wanted and REPO in target.parents:
+            elif entry in wanted:
+                continue
+            elif REPO in target.parents or prune_cache:
                 found.append((entry, "stale"))
 
     return found
@@ -292,7 +358,7 @@ def cmd_link(args: argparse.Namespace) -> int:
         if state in (CREATE, REPOINT):
             apply_link(link, state, args.dry_run)
             verb = "would link" if args.dry_run else ("linked" if state == CREATE else "repointed")
-            print(f"  {ok(verb):<22} {tilde(link.dst)} -> {link.src.relative_to(REPO)}")
+            print(f"  {ok(verb):<22} {tilde(link.dst)} -> {source_label(link.src)}")
         counts[state] += 1
 
     pruned = prune_candidates(plan)
@@ -433,8 +499,20 @@ def listed_skills() -> list[tuple[str, int, bool, str]]:
     return out
 
 
+_PLUGINS: list[dict] | None = None
+_PLUGINS_OK = False
+
+
 def installed_plugins() -> list[dict]:
-    """`claude plugin list --json`. A subprocess, but never a network call."""
+    """`claude plugin list --json`. A subprocess, but never a network call.
+
+    Queried once per run: the fan-out, the prune and three sections of `status`
+    all want it, and it is the slowest thing either offline subcommand does.
+    """
+    global _PLUGINS, _PLUGINS_OK
+    if _PLUGINS is not None:
+        return _PLUGINS
+    _PLUGINS = []
     try:
         proc = subprocess.run(
             ["claude", "plugin", "list", "--json"],
@@ -443,13 +521,21 @@ def installed_plugins() -> list[dict]:
             timeout=30,
         )
     except (OSError, subprocess.SubprocessError):
-        return []
+        return _PLUGINS
     if proc.returncode != 0:
-        return []
+        return _PLUGINS
     try:
-        return json.loads(proc.stdout)
+        _PLUGINS = json.loads(proc.stdout)
     except json.JSONDecodeError:
-        return []
+        return _PLUGINS
+    _PLUGINS_OK = True
+    return _PLUGINS
+
+
+def plugin_query_ok() -> bool:
+    """Whether the answer above is real, as opposed to the empty list we fall back to."""
+    installed_plugins()
+    return _PLUGINS_OK
 
 
 # --------------------------------------------------------------------------
@@ -460,7 +546,7 @@ def installed_plugins() -> list[dict]:
 def cmd_status(args: argparse.Namespace) -> int:
     plan = link_plan()
     by_src: dict[Path, dict[Path, str]] = {}
-    for link in plan:
+    for link in own_link_plan():
         by_src.setdefault(link.src, {})[link.dst.parent] = classify(link)
 
     # Pad first, colour second — an escape code inside a format spec silently
@@ -486,6 +572,20 @@ def cmd_status(args: argparse.Namespace) -> int:
         else:
             cells = "".join(cell(states.get(root, CREATE)) for root in SKILL_ROOTS)
         print(f"  {src.name:<26}{cells}")
+
+    print()
+    print(_c("1", "third-party skills, linked out of the plugin cache"))
+    print(dim(f"  {'':<26}{'~/.agents':<12}{'~/.cursor':<12}{'source'}"))
+    cache = plugin_cache_skills()
+    if not cache:
+        print(dim("  none — no enabled plugin in the cache ships a skill"))
+    for name, skill in cache:
+        cells = "".join(
+            cell(classify(Link(skill, root / name))) for root in (AGENTS_SKILLS, CURSOR_SKILLS)
+        )
+        # The cache path is <marketplace>/<plugin>/<version>/…; name the first two.
+        rel = skill.relative_to(PLUGIN_CACHE).parts
+        print(f"  {name:<26}{cells}{dim(f'{rel[1]}@{rel[0]}')}")
 
     print()
     print(_c("1", "marketplace entries"))
