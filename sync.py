@@ -11,6 +11,7 @@ installed by Claude Code itself, and linked out of its plugin cache.
 Subcommands
     link                 (default) idempotent symlink fan-out, then prune
     status               offline report: link state, plugins, skill-listing budget
+    readme               regenerate the README index between its markers
     check                which marketplace entries are behind upstream        [network]
     diff <plugin>        the upstream patch, filtered to what we consume      [network]
     update [plugin]      bump a pinned sha, reinstall, relink                 [network]
@@ -1269,6 +1270,153 @@ def cmd_unvendor(args: argparse.Namespace) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------
+# readme
+# --------------------------------------------------------------------------
+#
+# The repo went its whole life without a README; the workflow lived in sync.py's
+# docstring, which is the one place nobody looks. An index is worth having and
+# not worth maintaining by hand, so it is generated between markers and the
+# prose around it stays hand-written.
+
+BEGIN = "<!-- BEGIN GENERATED — ./sync.py readme -->"
+END = "<!-- END GENERATED -->"
+
+SCAFFOLD = f"""# agentic-tooling
+
+Skills, agents and plugins for Claude Code, and the third-party ones this setup
+consumes. `./sync.py` fans them out; `.claude-plugin/marketplace.json` tracks the
+rest. Everything below this line is generated — run `./sync.py readme`.
+
+{BEGIN}
+{END}
+"""
+
+
+def cell_text(text: str, limit: int = 180) -> str:
+    """One table cell: no raw pipes or newlines, and short enough to scan.
+
+    The reference skills still carry the long trigger-phrase descriptions they
+    were written with for model invocation — 700 chars of "also trigger when".
+    Under `disable-model-invocation` that text does no work, and in an index it
+    does less, so the first sentence is what the table shows.
+    """
+    text = " ".join(text.split()).replace("|", "\\|")
+    if len(text) <= limit:
+        return text
+    stop = text.find(". ", 40)
+    if 0 < stop <= limit:
+        return text[: stop + 1]
+    return text[: text.rfind(" ", 0, limit)] + " …"
+
+
+def upstream_url(up: Upstream) -> str:
+    if up.subpath:
+        return f"https://github.com/{up.repo}/tree/{up.sha}/{up.subpath}"
+    return f"https://github.com/{up.repo}/tree/{up.sha}"
+
+
+def readme_body() -> str:
+    out: list[str] = []
+    plugins = {p["id"].split("@")[0]: p for p in installed_plugins()}
+
+    def describe(skill_md: Path) -> tuple[str, str]:
+        name, description, suppressed = listing_text(skill_md)
+        return name, ("manual" if suppressed else "**automatic**"), description
+
+    own = own_skills()
+    out.append(f"## Skills ({len(own)})\n")
+    out.append("Invoked by name. *manual* means `disable-model-invocation`: it")
+    out.append("appears in the `/` menu, costs nothing in the skill listing, and")
+    out.append("Claude will not reach for it on its own.\n")
+    out.append("| | Invocation | |")
+    out.append("|---|---|---|")
+    for skill in own:
+        name, mode, description = describe(skill / "SKILL.md")
+        out.append(f"| `/{name}` | {mode} | {cell_text(description)} |")
+
+    for plugin in own_plugins():
+        manifest = json.loads((plugin / ".claude-plugin" / "plugin.json").read_text())
+        skills = plugin_skills(plugin)
+        out.append(f"\n## `{plugin.name}` plugin ({len(skills)} skills)\n")
+        out.append(f"{manifest.get('description', '')}\n")
+        out.append(
+            f"Version {manifest.get('version', '?')}. Toggle the whole family with "
+            f"`claude plugin disable {plugin.name}@skills-dir`.\n"
+        )
+        out.append("| | Invocation | |")
+        out.append("|---|---|---|")
+        for skill in skills:
+            name, mode, description = describe(skill / "SKILL.md")
+            out.append(f"| `/{plugin.name}:{name}` | {mode} | {cell_text(description)} |")
+
+    agents = own_agents()
+    if agents:
+        out.append(f"\n## Agents ({len(agents)})\n")
+        out.append("| | |")
+        out.append("|---|---|")
+        for agent in agents:
+            fields, _ = parse_frontmatter(agent)
+            label = fields.get("name") or agent.stem
+            out.append(f"| `{label}` | {cell_text(fields.get('description', ''))} |")
+
+    entries = marketplace_entries()
+    out.append(f"\n## Third party ({len(entries)})\n")
+    out.append("Installed by Claude Code from `.claude-plugin/marketplace.json`, each")
+    out.append("pinned to a reviewed commit. `./sync.py check` says what moved upstream,")
+    out.append("`./sync.py diff <name>` shows it, `./sync.py update <name>` accepts it.\n")
+    out.append("| | Pinned | Consumed | |")
+    out.append("|---|---|---|---|")
+    for entry in entries:
+        up = entry_upstream(entry)
+        name = entry["name"]
+        got = plugins.get(name)
+        state = "" if got and got.get("enabled") else " *(disabled)*" if got else " *(not installed)*"
+        if up is None:
+            out.append(f"| {name}{state} | — | — | {cell_text(entry.get('description', ''))} |")
+            continue
+        pin = f"[`{up.sha[:7]}`]({upstream_url(up)})"
+        scope = f"`{up.subpath}`" if up.subpath else "whole repo"
+        if up.vendored:
+            scope += f", vendored in `vendor/{name}/`"
+        if got:
+            count = len(list(Path(got["installPath"]).rglob("SKILL.md")))
+            scope += f" — {count} skill{'s' if count != 1 else ''}"
+        out.append(
+            f"| [{name}](https://github.com/{up.repo}){state} | {pin} | {scope} | "
+            f"{cell_text(entry.get('description', ''))} |"
+        )
+
+    listed = listed_skills()
+    counted = [s for s in listed if not s[2]]
+    out.append("\n## Listing budget\n")
+    out.append(
+        f"{sum(s[1] for s in counted):,} chars across {len(counted)} listed entries; "
+        f"{len(listed) - len(counted)} more are manual-only and cost nothing. "
+        "`./sync.py status` breaks it down."
+    )
+    return "\n".join(out) + "\n"
+
+
+def cmd_readme(args: argparse.Namespace) -> int:
+    readme = REPO / "README.md"
+    text = readme.read_text() if readme.is_file() else SCAFFOLD
+    if BEGIN not in text or END not in text:
+        print(bad(f"{readme.name} has no {BEGIN} … {END} markers"))
+        print(dim("  delete it to regenerate from scratch, or add the markers by hand"))
+        return 1
+
+    head, _, rest = text.partition(BEGIN)
+    _, _, tail = rest.partition(END)
+    new = f"{head}{BEGIN}\n\n{readme_body()}\n{END}{tail}"
+    if new == text:
+        print(f"{ok('unchanged')} {readme.name}")
+        return 0
+    readme.write_text(new)
+    print(f"{ok('wrote')} {readme.name}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sync.py",
@@ -1285,6 +1433,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_status = sub.add_parser("status", help="offline report; no network")
     p_status.set_defaults(func=cmd_status)
+
+    p_readme = sub.add_parser("readme", help="regenerate the README index")
+    p_readme.set_defaults(func=cmd_readme)
 
     p_check = sub.add_parser("check", help="which entries are behind upstream [network]")
     p_check.add_argument("plugin", nargs="*", help="default: every entry")
