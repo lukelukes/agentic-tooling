@@ -27,12 +27,14 @@ portability trap for that kind of work.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from concurrent import futures
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,6 +46,9 @@ SKILLS_DIR = REPO / "skills"
 AGENTS_DIR = REPO / "agents"
 PLUGINS_DIR = REPO / "plugins"
 VENDOR_DIR = REPO / "vendor"
+# Where a vendored entry's upstream coordinates go, so marketplace.json can hold
+# a plain relative path and check/diff still know what to compare against.
+VENDOR_SOURCES = VENDOR_DIR / "sources.json"
 MARKETPLACE = REPO / ".claude-plugin" / "marketplace.json"
 
 HOME = Path.home()
@@ -662,15 +667,23 @@ class Upstream:
     ref: str  # the branch we compare against
     sha: str  # what we are pinned to
     subpath: str | None  # the slice we consume; None means the whole repo
+    vendored: bool = False  # content checked in under vendor/, not fetched on install
 
 
 def entry_upstream(entry: dict) -> Upstream | None:
-    """An entry's upstream coordinates, or None if it has no remote to check.
+    """An entry's upstream coordinates, or None if it has none to resolve.
 
-    A string `source` is a relative path — a vendored entry, whose content is
-    checked in and therefore cannot drift on its own.
+    A string `source` is a relative path — a vendored entry. Its coordinates
+    moved to vendor/sources.json when it was vendored, so `check` and `diff`
+    keep working: vendoring should change where the bytes come from, not
+    whether you can see what upstream did since.
     """
     source = entry.get("source")
+    vendored = False
+    if isinstance(source, str):
+        record = vendor_sources().get(entry["name"], {})
+        source = record.get("source")
+        vendored = True
     if not isinstance(source, dict):
         return None
     kind = source.get("source")
@@ -683,7 +696,7 @@ def entry_upstream(entry: dict) -> Upstream | None:
     ref, sha = source.get("ref"), source.get("sha")
     if not (repo and ref and sha):
         return None
-    return Upstream(entry["name"], repo, ref, sha, subpath)
+    return Upstream(entry["name"], repo, ref, sha, subpath, vendored)
 
 
 def upstreams(names: list[str] | None = None) -> list[Upstream]:
@@ -933,13 +946,20 @@ def git(*argv: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(REPO), *argv], capture_output=True, text=True)
 
 
-def manifest_is_clean() -> bool:
-    """Whether marketplace.json has no edits we would sweep into the bump commit."""
-    rel = str(MARKETPLACE.relative_to(REPO))
-    return (
-        git("diff", "--quiet", "--", rel).returncode == 0
-        and git("diff", "--cached", "--quiet", "--", rel).returncode == 0
-    )
+def is_clean(*paths: str) -> bool:
+    """Whether these paths have no edits a bump commit would sweep up.
+
+    vendor/ counts as well as the manifest: a vendored bump commits content, so
+    an unrelated edit in there would ride along just as easily.
+    """
+    for rel in paths:
+        if git("diff", "--quiet", "--", rel).returncode != 0:
+            return False
+        if git("diff", "--cached", "--quiet", "--", rel).returncode != 0:
+            return False
+        if git("ls-files", "--others", "--exclude-standard", "--", rel).stdout.strip():
+            return False
+    return True
 
 
 def update_message(comp: Comparison) -> str:
@@ -1011,30 +1031,63 @@ def cmd_update(args: argparse.Namespace) -> int:
     if not ups:
         print(dim("nothing to update"))
         return 0
-    if not manifest_is_clean() and not args.no_commit:
-        print(bad(f"{tilde(MARKETPLACE)} has uncommitted edits"))
+    tracked = [str(MARKETPLACE.relative_to(REPO)), str(VENDOR_DIR.relative_to(REPO))]
+    if not args.no_commit and not is_clean(*tracked):
+        print(bad("marketplace.json or vendor/ has uncommitted edits"))
         print(dim("  commit or stash them first, or pass --no-commit to bump without committing"))
         return 1
+
+    # Drift is worth reporting whether or not it blocks anything: a vendored tree
+    # that no longer matches vendor/sources.json is no longer described by it.
+    drifted = {u.name for u in ups if u.vendored and vendor_drift(u.name)}
+    for name in sorted(drifted):
+        print(f"  {warn('drifted'):<22}{name:<26}{dim('edited since it was fetched')}")
 
     comparisons = compare_all(ups)
     for comp in comparisons:
         if comp.error:
             print(f"  {bad('error'):<22}{comp.up.name:<26}{dim(comp.error)}")
     behind = [c for c in comparisons if c.behind and not c.error]
-    if not behind:
-        print(f"{ok('up to date')} — nothing to bump")
-        return 0
 
+    refused = [c for c in behind if c.up.name in drifted]
+    for comp in refused:
+        print(f"  {bad('refused'):<22}{comp.up.name:<26}{dim('would overwrite the edited copy')}")
+    if refused:
+        print(
+            dim(
+                "\n  A vendored tree that no longer matches what was fetched holds a\n"
+                "  decision, and a bump would overwrite it. Land the edit upstream, or\n"
+                "  ./sync.py unvendor then vendor again to start from upstream.\n"
+            )
+        )
+    behind = [c for c in behind if c not in refused]
+
+    if not behind:
+        if not refused:
+            print(f"{ok('up to date')} — nothing to bump")
+        return 1 if refused else 0
+
+    bumped: list[Comparison] = []
     for comp in behind:
-        text = MARKETPLACE.read_text()
-        MARKETPLACE.write_text(rewrite_sha(text, comp.up.name, comp.head))
         scope = f"{len(comp.files)} file(s) under {comp.up.subpath or 'the whole repo'}"
+        paths = [str(MARKETPLACE.relative_to(REPO))]
+        if comp.up.vendored:
+            # The pin lives in vendor/sources.json, and accepting it means the
+            # content itself changes — so the commit is the content, not one line.
+            vendor_entry(comp.up, comp.head)
+            paths = [str(VENDOR_DIR.relative_to(REPO))]
+        else:
+            MARKETPLACE.write_text(rewrite_sha(MARKETPLACE.read_text(), comp.up.name, comp.head))
+        bumped.append(comp)
         print(f"  {ok('bumped'):<22}{comp.up.name:<26}{comp.up.sha[:7]}..{comp.head[:7]}  {dim(scope)}")
         if args.no_commit:
             continue
+        # Stage first: --only cannot commit a path git has never seen, which is
+        # every file of a freshly re-fetched vendor tree.
+        git("add", "--", *paths)
         # --only so a bump never sweeps up whatever else is staged.
         proc = subprocess.run(
-            ["git", "-C", str(REPO), "commit", "--only", str(MARKETPLACE.relative_to(REPO)), "-F", "-"],
+            ["git", "-C", str(REPO), "commit", "--only", *paths, "-F", "-"],
             input=update_message(comp),
             capture_output=True,
             text=True,
@@ -1043,16 +1096,177 @@ def cmd_update(args: argparse.Namespace) -> int:
             print(f"  {bad('commit failed'):<22}{dim(proc.stderr.strip())}")
             return 1
 
-    reinstall([c.up.name for c in behind])
-    return 0
+    reinstall([c.up.name for c in bumped])
+    return 1 if refused else 0
+
+
+# --------------------------------------------------------------------------
+# vendoring
+# --------------------------------------------------------------------------
+#
+# Vendoring is not a second system. A relative path is a first-class marketplace
+# source, so a vendored entry installs by exactly the same machinery — the only
+# change is where the bytes come from. What moves out of marketplace.json is the
+# *coordinates*, into vendor/sources.json, so that check and diff still work and
+# unvendor has something to restore.
+
+
+def vendor_sources() -> dict:
+    if not VENDOR_SOURCES.is_file():
+        return {}
+    try:
+        with VENDOR_SOURCES.open() as fh:
+            return json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def write_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def rewrite_source(name: str, source: object) -> None:
+    """Swap one entry's `source` between a remote object and a vendor path.
+
+    A json round-trip is safe here only because the manifest is written in
+    exactly json.dumps(indent=2) form; the assertion keeps it that way, since
+    silently reformatting all seven entries would wreck the reviewability the
+    file exists for. A sha bump still goes through rewrite_sha() — this shape
+    change cannot be done textually, but it is also not the frequent one.
+    """
+    text = MARKETPLACE.read_text()
+    data = json.loads(text)
+    if json.dumps(data, indent=2) + "\n" != text:
+        raise SystemExit(bad(f"{tilde(MARKETPLACE)} is hand-formatted; refusing to reformat it"))
+    for entry in data.get("plugins", []):
+        if entry.get("name") == name:
+            entry["source"] = source
+            break
+    else:
+        raise SystemExit(bad(f"{name} not found in {tilde(MARKETPLACE)}"))
+    write_json(MARKETPLACE, data)
+
+
+def tree_digest(root: Path) -> str:
+    """A content fingerprint of a vendored tree, so drift is detectable.
+
+    Path and bytes of every file, in sorted order. This is what `update` checks
+    before overwriting: a hand-edited vendored copy is a decision, and silently
+    replacing it with upstream would throw that decision away.
+    """
+    digest = hashlib.sha256()
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+        digest.update(str(path.relative_to(root)).encode())
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def fetch_subtree(up: Upstream, dest: Path) -> None:
+    """Check out just the consumed subpath at the pinned sha into `dest`.
+
+    Blobless and depth-1 against a sparse checkout: for a git-subdir entry this
+    is the difference between a few files and impeccable's 337 MB.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+
+        def run(*argv: str) -> None:
+            proc = subprocess.run(
+                ["git", "-C", str(work), *argv], capture_output=True, text=True, timeout=600
+            )
+            if proc.returncode != 0:
+                raise SystemExit(bad(f"git {argv[0]}: {proc.stderr.strip().split(chr(10))[-1]}"))
+
+        run("init", "-q")
+        run("remote", "add", "origin", f"https://github.com/{up.repo}.git")
+        if up.subpath:
+            run("sparse-checkout", "set", "--no-cone", up.subpath)
+        run("fetch", "-q", "--depth", "1", "--filter=blob:none", "origin", up.sha)
+        run("checkout", "-q", "FETCH_HEAD")
+
+        src = work / up.subpath if up.subpath else work
+        if not src.is_dir():
+            raise SystemExit(bad(f"{up.subpath} does not exist in {up.repo} at {up.sha[:7]}"))
+        if dest.exists():
+            shutil.rmtree(dest)
+        # .git would otherwise be checked into this repo as a nested repository.
+        shutil.copytree(src, dest, ignore=shutil.ignore_patterns(".git"))
+
+
+def vendor_entry(up: Upstream, sha: str) -> Path:
+    """Fetch `sha` into vendor/<name>/ and record the coordinates that produced it."""
+    dest = VENDOR_DIR / up.name
+    pinned = Upstream(up.name, up.repo, up.ref, sha, up.subpath, up.vendored)
+    fetch_subtree(pinned, dest)
+
+    source: dict = {"source": "github", "repo": up.repo, "ref": up.ref, "sha": sha}
+    if up.subpath:
+        source = {
+            "source": "git-subdir",
+            "url": up.repo,
+            "path": up.subpath,
+            "ref": up.ref,
+            "sha": sha,
+        }
+    sources = vendor_sources()
+    sources[up.name] = {"source": source, "digest": tree_digest(dest)}
+    write_json(VENDOR_SOURCES, dict(sorted(sources.items())))
+    return dest
+
+
+def vendor_drift(name: str) -> bool:
+    """Whether the checked-in copy no longer matches what was fetched."""
+    record = vendor_sources().get(name, {})
+    dest = VENDOR_DIR / name
+    if not record.get("digest") or not dest.is_dir():
+        return False
+    return tree_digest(dest) != record["digest"]
 
 
 def cmd_vendor(args: argparse.Namespace) -> int:
-    return not_yet("vendor")
+    (up,) = upstreams([args.plugin]) or [None]
+    if up is None:
+        print(bad(f"{args.plugin} has no upstream coordinates to fetch from"))
+        return 1
+    if up.vendored:
+        print(f"{args.plugin} is already vendored under {tilde(VENDOR_DIR / up.name)}")
+        return 0
+
+    dest = vendor_entry(up, up.sha)
+    files = sum(1 for p in dest.rglob("*") if p.is_file())
+    rewrite_source(up.name, f"./vendor/{up.name}")
+    print(f"  {ok('vendored'):<22}{up.name:<26}{files} file(s) at {up.sha[:7]}")
+    print(dim(f"  source is now ./vendor/{up.name}; coordinates in {tilde(VENDOR_SOURCES)}"))
+    reinstall([up.name])
+    return 0
 
 
 def cmd_unvendor(args: argparse.Namespace) -> int:
-    return not_yet("unvendor")
+    (up,) = upstreams([args.plugin]) or [None]
+    if up is None or not up.vendored:
+        print(bad(f"{args.plugin} is not vendored"))
+        return 1
+
+    record = vendor_sources()
+    source = record.pop(up.name)["source"]
+    rewrite_source(up.name, source)
+
+    dest = VENDOR_DIR / up.name
+    if dest.is_dir():
+        shutil.rmtree(dest)
+    if record:
+        write_json(VENDOR_SOURCES, record)
+    elif VENDOR_SOURCES.is_file():
+        VENDOR_SOURCES.unlink()
+    if VENDOR_DIR.is_dir() and not any(VENDOR_DIR.iterdir()):
+        VENDOR_DIR.rmdir()
+
+    print(f"  {ok('unvendored'):<22}{up.name:<26}back to {up.repo} at {up.sha[:7]}")
+    reinstall([up.name])
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
