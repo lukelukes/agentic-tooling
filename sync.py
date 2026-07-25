@@ -229,6 +229,41 @@ def apply_link(link: Link, state: str, dry_run: bool) -> None:
     link.dst.symlink_to(link.src, target_is_directory=link.src.is_dir())
 
 
+def prune_candidates(plan: list[Link]) -> list[tuple[Path, str]]:
+    """Links in the target roots that this repo owns and no longer wants.
+
+    Two cases, deliberately narrow:
+
+    * **dangling** — the link's target is gone. For the plugin cache this is the
+      normal aftermath of `claude plugin update`, because the cache path carries
+      the version; it is why `update` has to call `link`.
+    * **stale** — a live link into this repo that the plan no longer contains,
+      which is what a renamed or deleted skill leaves behind.
+
+    A live link into the plugin cache is never pruned as stale: third-party links
+    are added to the plan by a later phase, and being conservative here costs a
+    dangling link at worst while the alternative deletes working ones.
+    """
+    wanted = {link.dst for link in plan}
+    found: list[tuple[Path, str]] = []
+
+    for root in (*SKILL_ROOTS, CLAUDE_AGENTS):
+        if not root.is_dir():
+            continue
+        for entry in sorted(root.iterdir()):
+            if not entry.is_symlink():
+                continue
+            target = Path(os.path.normpath(entry.parent / os.readlink(entry)))
+            if not is_ours(target):
+                continue
+            if not target.exists():
+                found.append((entry, "dangling"))
+            elif entry not in wanted and REPO in target.parents:
+                found.append((entry, "stale"))
+
+    return found
+
+
 def cmd_link(args: argparse.Namespace) -> int:
     plan = link_plan()
     if not plan:
@@ -249,11 +284,18 @@ def cmd_link(args: argparse.Namespace) -> int:
             print(f"  {ok(verb):<22} {tilde(link.dst)} -> {link.src.relative_to(REPO)}")
         counts[state] += 1
 
+    pruned = prune_candidates(plan)
+    for path, why in pruned:
+        if not args.dry_run:
+            path.unlink()
+        verb = "would prune" if args.dry_run else "pruned"
+        print(f"  {warn(verb):<22} {tilde(path)} {dim(f'({why})')}")
+
     for link, state in blocked:
         what = "real file" if state == BLOCKED_FILE else "foreign symlink"
         print(f"  {bad('collision'):<22} {tilde(link.dst)} {dim(f'({what}, left alone)')}")
 
-    changed = counts[CREATE] + counts[REPOINT]
+    changed = counts[CREATE] + counts[REPOINT] + len(pruned)
     summary = f"{counts[LINKED]} already linked, {changed} changed"
     if blocked:
         summary += f", {len(blocked)} collisions"
