@@ -6,6 +6,7 @@ description: >
   system or module, You see the same shape of problem appearing repeatedly,
   User explicitly asks for extensible or composable design, You're tempted
   to add a flag or parameter to an existing function
+disable-model-invocation: true
 ---
 
 # Primitives Over Features

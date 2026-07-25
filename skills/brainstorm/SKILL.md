@@ -1,3 +1,9 @@
+---
+name: brainstorm
+description: Explore an idea through rigorous, deliberately challenging conversation, then synthesize the discussion into a brainstorming document.
+disable-model-invocation: true
+---
+
 # Brainstorming Agent Prompt
 
 ## System Prompt

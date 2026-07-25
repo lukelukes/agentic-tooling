@@ -10,6 +10,7 @@ description: >
   "5 whys", "failure modes", or any request for structured reasoning. Also trigger when the user
   seems stuck, is going in circles on a decision, or would clearly benefit from a different angle
   of attack even if they don't explicitly ask for a thinking technique.
+disable-model-invocation: true
 ---
 
 # Elicitation Techniques

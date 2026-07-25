@@ -1,13 +1,29 @@
+---
+name: best-practice-research
+description: Research current best practices for a technology and write a terse, LLM-optimized guidance file for coding agents to reference.
+argument-hint: <target> [version] [project-type] [focus-areas]
+arguments: target version project_type focus_areas
+context: fork
+background: false
+disable-model-invocation: true
+---
+
 <task>
-Research current best practices for {{TARGET}} and produce a terse, LLM-optimized guidance file that AI coding agents can reference when working with this technology.
+Research current best practices for $target and produce a terse, LLM-optimized guidance file that AI coding agents can reference when working with this technology.
 </task>
 
 <inputs>
-<target>{{TARGET}}</target>
-<version>{{VERSION | "latest stable"}}</version>
-<project_type>{{PROJECT_TYPE | "general"}}</project_type>
-<focus_areas>{{FOCUS_AREAS | "balanced"}}</focus_areas>
+<target>$target</target>
+<version>$version</version>
+<project_type>$project_type</project_type>
+<focus_areas>$focus_areas</focus_areas>
 </inputs>
+
+<input_defaults>
+Only `target` is required. An empty element takes its default:
+`version` → the latest stable release, `project_type` → general,
+`focus_areas` → balanced. If `target` itself is empty, ask for it before researching.
+</input_defaults>
 
 <research_instructions>
 Search comprehensively across these source types, prioritizing recency:
@@ -22,7 +38,7 @@ Search comprehensively across these source types, prioritizing recency:
 
 Prioritize modern, idiomatic patterns. When a newer approach supersedes an older one, document only the newer approach unless the older remains significantly prevalent.
 
-If {{VERSION}} is specified, constrain recommendations to that version. Otherwise, target the latest stable release and note any bleeding-edge patterns with explicit version requirements.
+If `<version>` above is non-empty, constrain recommendations to that version. Otherwise, target the latest stable release and note any bleeding-edge patterns with explicit version requirements.
 </research_instructions>
 
 <output_format>
@@ -30,11 +46,11 @@ Produce a markdown file with the following structure. Keep total length between 
 
 Use this exact structure:
 ```markdown
-# {{TARGET}} Guidance
+# $target Guidance
 
 > Version: {{resolved_version}}
 > Last researched: {{date}}
-> Project type: {{PROJECT_TYPE}}
+> Project type: {{resolved_project_type}}
 
 ## Quick Reference
 
@@ -79,7 +95,7 @@ Format: `IF {{condition}} THEN {{action}}`
 ## Related Guidance
 
 {{Only if applicable}}
-When working with {{TARGET}} alongside other technologies:
+When working with $target alongside other technologies:
 - For TypeScript specifics: @typescript.md
 - For testing patterns: @testing.md
 - {{other relevant cross-references}}
@@ -100,34 +116,34 @@ Use these markers consistently:
 - No code snippets (they consume line budget; agent can look up syntax)
 - No preamble or meta-commentary
 - No obvious/generic advice ("write clean code", "use meaningful names")
-- Every statement should be specific to {{TARGET}}
+- Every statement should be specific to $target
 - Use concrete thresholds where applicable ("if > 10 items", "when latency exceeds 100ms")
 - Assume the agent has full codebase access—reference file patterns, not hypotheticals
 - Front-load the most important information in each section
 </style_constraints>
 
 <focus_weighting>
-{{IF FOCUS_AREAS specified}}
-Weight the following sections more heavily, providing additional depth:
-{{FOCUS_AREAS}}
+If `<focus_areas>` above is non-empty, weight these sections more heavily,
+providing additional depth:
+
+$focus_areas
+
 Other sections should remain present but can be more condensed.
-{{END IF}}
 </focus_weighting>
 
 <project_type_context>
-{{IF PROJECT_TYPE specified}}
-Tailor recommendations for a {{PROJECT_TYPE}}:
+If `<project_type>` above is non-empty, tailor recommendations for a
+$project_type:
 - CLI tool: emphasize startup time, argument parsing patterns, exit codes
 - Web app: emphasize request handling, state management, routing
 - Library: emphasize API design, backwards compatibility, documentation
 - Microservice: emphasize resilience, observability, inter-service communication
 - Monorepo: emphasize module boundaries, shared code patterns, build optimization
-{{END IF}}
 </project_type_context>
 
 <quality_checks>
 Before finalizing, verify:
-1. Every recommendation is specific to {{TARGET}}, not generic programming advice
+1. Every recommendation is specific to $target, not generic programming advice
 2. Confidence markers are applied consistently
 3. Anti-patterns include what to do instead
 4. Decision heuristics cover the most common branch points

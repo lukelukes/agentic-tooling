@@ -7,6 +7,7 @@ description: >
   (3) restructuring documentation that mixes concerns, (4) classifying content into the correct
   Diataxis quadrant, (5) user asks about Diataxis or documentation best practices, (6) user asks
   to "write docs", "add documentation", "document this", or similar requests.
+disable-model-invocation: true
 ---
 
 # Diataxis Documentation Framework

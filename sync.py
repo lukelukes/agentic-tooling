@@ -172,6 +172,12 @@ def link_plan() -> list[Link]:
     a skills-dir plugin and gives it a /namespace:command prefix. The other two roots
     do not understand plugin namespacing, so they get the plugin's individual skills
     instead; that is what "everything reaches Cursor too" means for a plugin.
+
+    Those roots are flat, so a plugin skill lands there as `<plugin>-<skill>`. Without
+    that prefix `plugins/<p>/skills/review` and `skills/review` — distinct commands
+    under Claude Code, /<p>:review and /review — would both want
+    ~/.agents/skills/review, and each run of this script would repoint the link at
+    the other one, forever.
     """
     plan: list[Link] = []
 
@@ -186,7 +192,7 @@ def link_plan() -> list[Link]:
         plan.append(Link(plugin, CLAUDE_SKILLS / plugin.name))
         for skill in plugin_skills(plugin):
             for root in (AGENTS_SKILLS, CURSOR_SKILLS):
-                plan.append(Link(skill, root / skill.name))
+                plan.append(Link(skill, root / f"{plugin.name}-{skill.name}"))
 
     return plan
 

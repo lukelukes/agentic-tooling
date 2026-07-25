@@ -1,5 +1,8 @@
 ---
-description: Remove AI-generated code patterns from the current branch
+name: remove-slop
+description: Strip AI-generated Go patterns — narrating comments, defensive nil checks, over-abstraction — from this branch's diff against main.
+paths: ["**/*.go"]
+disable-model-invocation: true
 ---
 
 # Remove AI Code Slop (Go)

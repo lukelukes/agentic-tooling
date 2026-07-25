@@ -8,6 +8,7 @@ description: >
   or ScalaCheck. Trigger when the user wants to go beyond example-based tests, wants to test invariants,
   wants to find edge cases automatically, or says things like "write better tests", "test this more
   thoroughly", "what properties does this code have", or "how do I know this is really correct".
+disable-model-invocation: true
 ---
 
 # Property-Based Testing

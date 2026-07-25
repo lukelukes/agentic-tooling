@@ -1,3 +1,12 @@
+---
+name: 10x-check
+description: Review this codebase's production code and test strategy as a hard-to-please staff engineer, rating every test against the four pillars.
+argument-hint: "[paths or test files to focus on]"
+context: fork
+background: false
+disable-model-invocation: true
+---
+
 Review our production code and test strategy as a 10x senior engineer (10+ years).
 
 Evaluate tests against the four pillars:

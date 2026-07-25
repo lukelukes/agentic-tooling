@@ -1,6 +1,8 @@
 ---
 name: analyze-illegal-states
 description: Analyzes code for violations of "make illegal states unrepresentable". Use when reviewing code for type safety, domain modeling issues, or when asked to find places where invalid runtime states could be eliminated through better type design. Also use this skill when the user asks to "improve types", "tighten types", "make types stricter", review code for "impossible states" or "invalid states", or when you notice boolean-flag soup, stringly-typed enums, nullable ambiguity, or other modeling smells during a code review or refactoring task. Trigger on mentions of sum types, discriminated unions, algebraic data types, or typestate patterns.
+disable-model-invocation: true
+paths: ["**/*.ts", "**/*.tsx", "**/*.go", "**/*.rs"]
 ---
 
 # Analyzing Illegal States

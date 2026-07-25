@@ -8,6 +8,8 @@ description: >
   about TUI architecture patterns. Also trigger when you see imports of bubbletea, bubbles,
   or lipgloss packages, or when the user mentions "tea.Model", "tea.Cmd", "tea.Msg",
   or "charm" in a Go TUI context.
+disable-model-invocation: true
+paths: ["**/*.go"]
 ---
 
 # Building Bubbletea Programs
