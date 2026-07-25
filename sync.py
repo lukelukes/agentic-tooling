@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -907,8 +908,143 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return 0
 
 
+def rewrite_sha(text: str, name: str, new: str) -> str:
+    """Repoint one entry's `sha`, textually.
+
+    Deliberately not a json round-trip: re-serialising the whole manifest would
+    reformat it and bury a one-line change in a whole-file diff. The point of
+    this file is that `git log -p` on it reads as the history of what was
+    accepted, and that only works if a bump is one line.
+
+    Anchored on the entry's own `"name"` because two entries can share a sha —
+    frontend-design and skill-creator are both slices of anthropics/skills.
+    """
+    anchor = re.search(rf'"name"\s*:\s*"{re.escape(name)}"', text)
+    if not anchor:
+        raise SystemExit(bad(f"{name} not found in {tilde(MARKETPLACE)}"))
+    field_re = re.compile(r'("sha"\s*:\s*")([0-9a-fA-F]{7,40})(")')
+    m = field_re.search(text, anchor.end())
+    if not m:
+        raise SystemExit(bad(f"{name} has no sha to bump"))
+    return text[: m.start(2)] + new + text[m.end(2) :]
+
+
+def git(*argv: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(REPO), *argv], capture_output=True, text=True)
+
+
+def manifest_is_clean() -> bool:
+    """Whether marketplace.json has no edits we would sweep into the bump commit."""
+    rel = str(MARKETPLACE.relative_to(REPO))
+    return (
+        git("diff", "--quiet", "--", rel).returncode == 0
+        and git("diff", "--cached", "--quiet", "--", rel).returncode == 0
+    )
+
+
+def update_message(comp: Comparison) -> str:
+    """The commit body: what was accepted, and the evidence it was reviewable."""
+    up = comp.up
+    scope = up.subpath or "the whole repo"
+    lines = [
+        f"chore(deps): update {up.name} to {comp.head[:7]}",
+        "",
+        f"{comp.commits} commit{'s' if comp.commits != 1 else ''} upstream since "
+        f"{up.sha[:7]}; {len(comp.files)} file(s) under {scope}"
+        + (f", of {comp.total_files} changed in total" if up.subpath else "")
+        + ".",
+        "",
+        comp.url,
+    ]
+    if comp.files:
+        lines.append("")
+        for entry in comp.files:
+            lines.append(f"  {entry.get('status', 'modified')[:1].upper()} {entry['filename']}")
+    if comp.truncated:
+        lines += ["", "Upstream file list capped at 300 by the compare API."]
+    return "\n".join(lines) + "\n"
+
+
+def run_claude(*argv: str) -> bool:
+    proc = subprocess.run(["claude", *argv], capture_output=True, text=True, timeout=600)
+    label = " ".join(argv)
+    if proc.returncode == 0:
+        print(f"  {ok('ran'):<22}{label}")
+        return True
+    tail = (proc.stderr or proc.stdout).strip().split("\n")[-1]
+    print(f"  {bad('failed'):<22}{label}  {dim(tail)}")
+    return False
+
+
+def reinstall(names: list[str]) -> None:
+    """Make Claude Code act on the new pin, then repoint the links it invalidated.
+
+    Uninstall-then-install rather than `claude plugin update`, because update
+    compares the plugin's *manifest version*, not the pinned commit. impeccable
+    ships `"version": "4.0.2"`, so rolling its sha back 13 commits and running
+    update reports "already at the latest version" and leaves the cache holding
+    content from a commit the manifest no longer pins. Reinstalling honors the
+    pin: the same test then correctly drops the agent those 13 commits added.
+
+    Entries with no manifest version are keyed by sha prefix instead, so their
+    cache directory moves and every ~/.agents and ~/.cursor link into it
+    dangles. That is the other reason this ends in a relink.
+    """
+    market = load_marketplace().get("name", "luke")
+    disabled = {p["id"].split("@")[0] for p in installed_plugins() if not p.get("enabled")}
+
+    run_claude("plugin", "marketplace", "update", market)
+    for name in names:
+        qualified = f"{name}@{market}"  # the bare name is not enough for the CLI
+        run_claude("plugin", "uninstall", qualified, "--keep-data")
+        if run_claude("plugin", "install", qualified) and name in disabled:
+            # A fresh install comes up enabled; a deliberate disable should survive.
+            run_claude("plugin", "disable", qualified)
+
+    global _PLUGINS, _PLUGINS_OK
+    _PLUGINS, _PLUGINS_OK = None, False
+    cmd_link(argparse.Namespace(dry_run=False))
+
+
 def cmd_update(args: argparse.Namespace) -> int:
-    return not_yet("update")
+    ups = upstreams(args.plugin)
+    if not ups:
+        print(dim("nothing to update"))
+        return 0
+    if not manifest_is_clean() and not args.no_commit:
+        print(bad(f"{tilde(MARKETPLACE)} has uncommitted edits"))
+        print(dim("  commit or stash them first, or pass --no-commit to bump without committing"))
+        return 1
+
+    comparisons = compare_all(ups)
+    for comp in comparisons:
+        if comp.error:
+            print(f"  {bad('error'):<22}{comp.up.name:<26}{dim(comp.error)}")
+    behind = [c for c in comparisons if c.behind and not c.error]
+    if not behind:
+        print(f"{ok('up to date')} — nothing to bump")
+        return 0
+
+    for comp in behind:
+        text = MARKETPLACE.read_text()
+        MARKETPLACE.write_text(rewrite_sha(text, comp.up.name, comp.head))
+        scope = f"{len(comp.files)} file(s) under {comp.up.subpath or 'the whole repo'}"
+        print(f"  {ok('bumped'):<22}{comp.up.name:<26}{comp.up.sha[:7]}..{comp.head[:7]}  {dim(scope)}")
+        if args.no_commit:
+            continue
+        # --only so a bump never sweeps up whatever else is staged.
+        proc = subprocess.run(
+            ["git", "-C", str(REPO), "commit", "--only", str(MARKETPLACE.relative_to(REPO)), "-F", "-"],
+            input=update_message(comp),
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            print(f"  {bad('commit failed'):<22}{dim(proc.stderr.strip())}")
+            return 1
+
+    reinstall([c.up.name for c in behind])
+    return 0
 
 
 def cmd_vendor(args: argparse.Namespace) -> int:
@@ -945,7 +1081,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_diff.set_defaults(func=cmd_diff)
 
     p_update = sub.add_parser("update", help="bump a pinned sha and reinstall [network]")
-    p_update.add_argument("plugin", nargs="?")
+    p_update.add_argument("plugin", nargs="*", help="default: every entry that is behind")
+    p_update.add_argument(
+        "--no-commit", action="store_true", help="bump the sha but leave the commit to you"
+    )
     p_update.set_defaults(func=cmd_update)
 
     p_vendor = sub.add_parser("vendor", help="promote an entry to a checked-in copy [network]")
