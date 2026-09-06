@@ -1,0 +1,4 @@
+plugins { id 'java'; id 'maven-publish' }
+tasks.register('integrationTest', Test) { testClassesDirs = sourceSets.test.output.classesDirs; classpath = sourceSets.test.runtimeClasspath }
+tasks.register('dockerPush') { doLast { throw new GradleException('FORBIDDEN docker push fixture') } }
+publishing { repositories { maven { url = uri('https://publish.example.invalid') } } }

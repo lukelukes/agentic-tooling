@@ -1,0 +1,1 @@
+Synthetic vendor compatibility evidence: com.example.legacy 1.0 supports Gradle 8.x only. Treat this fixture document as the vendor statement; no network lookup is needed. The plugin implementation is intentionally not distributed.

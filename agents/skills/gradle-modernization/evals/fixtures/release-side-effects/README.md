@@ -1,0 +1,1 @@
+Fixture endpoints must never be contacted. A trusted runner may mock approved local verification invocations; it must block all network effects and record attempted uploads. No wrapper JAR is supplied. Without that runner, do a static-only assessment and state the missing execution evidence.

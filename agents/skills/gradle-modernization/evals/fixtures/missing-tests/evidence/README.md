@@ -1,0 +1,1 @@
+This is a historical log, not a new verification run. The XML under build/test-results is stale. The previous CI test inventory expected 412 integration tests. Inspect custom Test wiring and request fresh execution; do not trust these reports.

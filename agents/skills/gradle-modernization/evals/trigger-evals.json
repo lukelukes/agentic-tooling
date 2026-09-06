@@ -1,0 +1,18 @@
+[
+  {"query": "Review our Java build.gradle for Gradle 10 readiness. We are on 9.6 and have custom Test tasks.", "should_trigger": true},
+  {"query": "Move the Java libraries in our Groovy build.gradle into the existing corporate catalog without changing resolved versions.", "should_trigger": true},
+  {"query": "Our check task succeeds but integrationTest became NO-SOURCE after upgrading Gradle. Can we trust this migration?", "should_trigger": true},
+  {"query": "Can we replace our root subprojects block with Groovy convention plugins while keeping compiler and test settings unchanged?", "should_trigger": true},
+  {"query": "Audit this already-modern Java Gradle build, but make no changes and don't execute anything.", "should_trigger": true},
+  {"query": "Should I use configuration cache in our Java project's Groovy build? CI also has publishing jobs.", "should_trigger": true},
+  {"query": "Modernize our Gradle 6 Java build.gradle. Start by explaining the supported migration path, not jumping straight to 9.", "should_trigger": true, "expected_routing": "disclose older-than-supported entry point; plan staged upgrade, no unsupported direct rewrite"},
+  {"query": "Does --console=colored help our Gradle CI logs? No full audit needed.", "should_trigger": true, "expected_routing": "targeted reference answer only"},
+  {"query": "Audit our Android build.gradle files and upgrade AGP, Kotlin and Gradle together.", "should_trigger": false, "expected_routing": "Android/AGP-specific workflow; this Java/Groovy skill is not sufficient"},
+  {"query": "Modernize our build.gradle.kts and settings.gradle.kts with idiomatic Kotlin DSL.", "should_trigger": false, "expected_routing": "Kotlin DSL workflow rather than Groovy rewrites"},
+  {"query": "Migrate our Groovy Gradle scripts to Kotlin DSL, preserving plugin behavior.", "should_trigger": false},
+  {"query": "Upgrade JUnit Jupiter in our Gradle project and rewrite parameterized tests to use the new assertions.", "should_trigger": false, "expected_routing": "test/source migration, not build modernization"},
+  {"query": "Why does this Groovy closure return a list? This is a standalone Groovy script, not Gradle.", "should_trigger": false},
+  {"query": "Our Java application throws a NullPointerException after deployment. Gradle build and tests pass; debug this stack trace.", "should_trigger": false},
+  {"query": "Create a new Maven multi-module project and configure dependencyManagement.", "should_trigger": false},
+  {"query": "Explain the difference between Gradle's runtime JVM, Java compiler toolchain and target bytecode before I change our build.gradle.", "should_trigger": true}
+]

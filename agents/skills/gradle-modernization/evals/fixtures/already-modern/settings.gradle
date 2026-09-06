@@ -1,0 +1,9 @@
+rootProject.name = 'modern'
+dependencyResolutionManagement {
+ repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
+ repositories {
+  exclusiveContent { forRepository { maven { url = uri('https://corp.example.invalid/releases') } }; filter { includeGroup 'corp.example' } }
+  mavenCentral()
+ }
+ versionCatalogs { libs { library('our_lib', 'corp.example', 'lib').version('1.0') } }
+}

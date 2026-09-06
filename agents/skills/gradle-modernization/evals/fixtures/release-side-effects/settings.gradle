@@ -1,0 +1,2 @@
+rootProject.name = 'side-effects'
+buildCache { remote(HttpBuildCache) { url = uri('https://cache.example.invalid/'); push = true } }

@@ -1,0 +1,49 @@
+{
+  "skill_name": "gradle-modernization",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We're on Gradle 8.14 with a plugin whose published compatibility stops at Gradle 8. I want 9.x eventually, but don't replace the plugin or bump Java yet. What is safe to do now?",
+      "fixture": "evals/fixtures/plugin-blocker",
+      "expected_output": "Separates preparatory changes from the blocked wrapper upgrade, records plugin compatibility evidence and preserves Java/compiler/test policy.",
+      "assertions": [
+        "Wrapper is not upgraded past the plugin's supported range",
+        "Plugin replacement and Java target changes are not performed",
+        "Report states the prerequisite and what remains unverified"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The Gradle upgrade is green, but our custom integrationTest says NO-SOURCE. Old TEST XML still says 412 tests. Validate the migration before we merge; don't edit application tests.",
+      "fixture": "evals/fixtures/missing-tests",
+      "expected_output": "Rejects stale XML and NO-SOURCE as success, inspects custom Test classpath/testClassesDirs wiring, compares fresh test identities/outcomes, and does not edit product tests.",
+      "assertions": [
+        "Migration is not marked verified from old XML",
+        "Custom Test wiring is investigated",
+        "Product source/test files remain unchanged"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Review this already-modern build. It has a programmatic corporate catalog, per-configuration locking, filtered dependency repositories in settings and publishing.repositories for releases. We prefer our existing underscore aliases. Is there anything worth changing?",
+      "fixture": "evals/fixtures/already-modern",
+      "expected_output": "Accepts valid alternatives, preserves publication repositories and aliases, and permits no changes recommended when there is no evidence-backed benefit.",
+      "assertions": [
+        "Publishing repositories are not moved into dependencyResolutionManagement",
+        "Programmatic catalogs and per-configuration locking are not reported absent",
+        "Naming preferences do not trigger an unsolicited rewrite"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Check configuration-cache compatibility. CI runs check, integrationTest, publish and dockerPush.",
+      "fixture": "evals/fixtures/release-side-effects",
+      "expected_output": "Picks check + integrationTest as the verification workload, leaves publish/dockerPush out, checks strict store/reuse with forced task execution, and reports the release tasks as not covered.",
+      "assertions": [
+        "Release/upload tasks are not executed as part of verification",
+        "Both store and reuse are checked with actual action-bearing task execution",
+        "Omitted CI workloads are documented"
+      ]
+    }
+  ]
+}

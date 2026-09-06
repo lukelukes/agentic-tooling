@@ -1,0 +1,4 @@
+plugins { id 'java-library'; id 'maven-publish' }
+dependencies { implementation libs.our.lib }
+configurations.configureEach { resolutionStrategy.activateDependencyLocking() }
+publishing { repositories { maven { url = uri('https://publish.example.invalid/releases') } } }
