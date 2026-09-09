@@ -11,7 +11,7 @@ Scope: Groovy DSL (`.gradle`). Starting point usually 9.x, sometimes 8.x. Target
 
 For Gradle <8.x, provide a staged migration plan using the relevant official guides; do not apply the 8/9.x recipes directly. Kotlin DSL and Android/AGP are out of scope; note them as coverage gaps in mixed builds.
 
-Helpers require Python 3.10+. Resolve `scripts/` and `references/` relative to this skill's directory, not the audited project's working directory. Keep audit outputs and logs in a scratch directory (e.g. `.gradle-modernization/` in the project, gitignored) so they don't pollute the diff.
+Helpers require Python 3.10+ (3.11+ to resolve catalog plugin aliases in the inventory). Resolve `scripts/` and `references/` relative to this skill's directory, not the audited project's working directory. Keep audit outputs and logs in a scratch directory (e.g. `.gradle-modernization/` in the project, gitignored) so they don't pollute the diff.
 
 ## Reference files
 
@@ -22,23 +22,26 @@ Helpers require Python 3.10+. Resolve `scripts/` and `references/` relative to t
 | `references/gradle-10-deprecations.md` | Every version transition and Gradle-10 readiness; source-pinned triage index. |
 | `references/report-template.md` | Writing the audit report. |
 | `references/verification.md` | Baseline capture, before/after comparison, configuration-cache check, dependency diffing. |
-| `scripts/audit_gradle_project.py` | Read-only static scan, run first. `scripts/test_audit.py` is its regression suite. |
-| `scripts/compare_runs.py` | Summarize a Gradle log + JUnit XML into JSON; diff two summaries (task outcomes, test identities, cache store/reuse, deprecation count). |
+| `scripts/gather_facts.py` | **The one fact-gathering command** (static scan + plugin inventory + every Gradle run). Run it in Phase 1, and again with `--compare-with` after each Phase 2 group. |
+| `scripts/audit_gradle_project.py` | The static scanner `gather_facts.py` embeds; run alone only for a quick static-only look. |
+| `scripts/compare_runs.py` | Log/JUnit-XML summarizer and differ that `gather_facts.py` embeds; use directly for ad-hoc logs. |
 | `evals/README.md` | Maintaining/testing this skill. |
 
 **Targeted questions** ("why does 9.6 warn about `ext`?", "should I use `--console=colored`?"): read only the relevant reference section and answer. Reserve the full checklist walk for an actual audit request.
 
 ## Phase 1 — Audit
 
-0. **Prerequisites.** JDK available (Gradle 9 daemon needs 17+). If Gradle can't run, the audit is static-only and every "build-reported" line in the report is marked *not checked*. Note `git status` so later diffs are attributable to the skill's edits.
-1. **Static facts.** `python scripts/audit_gradle_project.py <root> --json`. The scanner recursively discovers builds under `<root>` and classifies project, settings, applied and precompiled scripts. It does not follow symlinks or read outside `<root>`; if `settings.gradle` includes an external build, run the scanner on it separately. Read `facts.coverage`: skipped/unreadable paths, Kotlin DSL, dynamic includes and unsupported syntax are gaps, not passes. The lexical scanner masks strings/comments but does not evaluate Groovy, so **confirmed** means a directly observed fact, **likely** an executable pattern, **suspected** a heuristic. Check applicability of each finding against the actual receivers (dependency/plugin/buildscript/publishing repositories are different things). Use `facts.build_facts` and each finding's `build` identity for included-build settings/catalog/locking checks. `facts.build_facts.<build>.locking` lists, per project, which script declares locking, whether it actually activates anything (`lockAllConfigurations()` / `activateDependencyLocking()`), and whether that project's `gradle.lockfile` exists and has entries. A `dependencyLocking {}` block that only sets `lockMode` locks nothing, and `allprojects {}` locking with lockfiles in only some projects is a C1 finding, not a pass.
-2. **Dynamic facts** (if Gradle runs). Save the output of each under the scratch directory:
-   - `./gradlew help --warning-mode=all` — deprecations (9.3+ prints Problems inline; 9.7 gives source locations).
-   - **Baseline** of the CI verification tasks (typically `check`, `test`, custom `Test` tasks; not `publish`/deploy/docker tasks) in the project's **existing configuration-cache mode**: `--no-build-cache --rerun-tasks --console=plain --warning-mode=all`. Summarize with `compare_runs.py summarize`, mapping each `Test` task to its XML directory. If the baseline fails, report the blocker rather than manufacturing a green baseline.
-   - **Configuration cache**: run the same tasks **twice** with `--configuration-cache --configuration-cache-problems=fail --no-build-cache --rerun-tasks --console=plain`. First run must store, second must reuse, and the test tasks must execute both times (`compare_runs.py compare --cache-pair`). `UP-TO-DATE`, `FROM-CACHE` or warn-mode success does not establish compatibility.
-   - `./gradlew tasks --provenance` (9.5+) — which plugin/script registered each task. Older versions: task report + manual attribution.
-   - Dependency baselines: `:<project>:dependencies --configuration <name>` for compile/runtime, test compile/runtime, annotation processors, custom source sets and build-logic classpaths as applicable. A platform/aggregation project may have no `runtimeClasspath`; record N/A.
-   - **Gradle 9.0 can silently stop running custom `Test` tasks** that relied on inheriting `testClassesDirs`/`classpath`. Unexpected `NO-SOURCE`, missing XML or a changed test set is a blocker even if aggregate counts look fine.
+1. **Gather facts — one command.** Identify the CI verification tasks first (`check`, `test`, custom `Test` tasks; not `publish`/deploy/docker), then:
+   ```sh
+   python <skill>/scripts/gather_facts.py <root> --tasks <ci tasks> [--test-xml :task=DIR ...]
+   ```
+   It writes `<root>/.gradle-modernization/baseline/` (self-gitignored) and prints a short summary. Read `facts.json` sections as needed rather than the raw logs. What it does, in order:
+   - **Static**: the read-only scanner plus a plugin inventory (`static.plugins`: id, version, catalog alias, `apply plugin:`, buildscript classpath).
+   - **Prerequisites**: `git status`, `java -version`, launcher resolution (`gradlew`, else `gradle` on PATH — noted as a gap since versions may differ).
+   - **Dynamic** (skipped with a recorded reason when Gradle can't run; then every "build-reported" line in the report is *not checked*): `--version`; `help --warning-mode=all` (deprecations, deduplicated); the **baseline** of the CI tasks with `--no-build-cache --rerun-tasks --console=plain --warning-mode=all` in the project's existing configuration-cache mode; the **configuration-cache pair** (same tasks twice with `--configuration-cache --configuration-cache-problems=fail`, first must store, second must reuse, tests must execute both times, and the store run is compared with the baseline); `tasks --provenance` (9.5+, else `tasks --all`); `dependencies` per project split into one report per configuration (compile/runtime/test/annotation-processor plus any extra `*Classpath`; missing ones recorded as N/A); `buildEnvironment`.
+   - JUnit XML is auto-mapped from `build/test-results/<task>`; pass `--test-xml :task=DIR` for relocated reports. A test-like task with no XML, XML older than the run (`stale_xml`), `NO-SOURCE`, or a missing XML directory is a blocker lead even when counts look fine: **Gradle 9.0 can silently stop running custom `Test` tasks** that relied on inheriting `testClassesDirs`/`classpath`.
+   - A failed baseline is reported (log tail in the summary, exit 1) and the cache pair is skipped; report the blocker rather than manufacturing a green baseline. Options: `--static-only`, `--skip-cc`, `--projects`, `--configurations`, `--timeout` (per Gradle command, default 1800 s).
+2. **Interpret the facts.** `facts.gaps` and `static.facts.coverage` (skipped/unreadable paths, Kotlin DSL, dynamic includes, unsupported syntax) are gaps, not passes. The lexical scanner masks strings/comments but does not evaluate Groovy, so **confirmed** means a directly observed fact, **likely** an executable pattern, **suspected** a heuristic. Check applicability of each finding against the actual receivers (dependency/plugin/buildscript/publishing repositories are different things). Use `static.facts.build_facts` and each finding's `build` identity for included-build settings/catalog/locking checks. `build_facts.<build>.locking` lists, per project, which script declares locking, whether it actually activates anything (`lockAllConfigurations()` / `activateDependencyLocking()`), and whether that project's `gradle.lockfile` exists and has entries. A `dependencyLocking {}` block that only sets `lockMode` locks nothing, and `allprojects {}` locking with lockfiles in only some projects is a C1 finding, not a pass. The scanner does not follow symlinks or read outside `<root>`; if `settings.gradle` includes an external build, gather facts for it separately. A platform/aggregation project legitimately has no `runtimeClasspath` (N/A).
 3. **Walk the references.** `best-practices.md` top to bottom, mark each: ✅ followed · ❌ violated · ➖ N/A · ❓ not checked · ⚠ suspected (scanner lead, unverified). Then `gradle-9x-features.md` for every version between current and target. For **every version transition**, also read `gradle-10-deprecations.md` and the target-pinned official upgrade guide (plus the major/latest-8.x guides when crossing 8 → 9). Review breaking changes and bundled-tool defaults even without warnings. Don't infer a removal deadline from a chapter title.
 4. **Plugin compatibility inventory** — mandatory when the target version differs from current. List every plugin with its version and the Gradle/JDK range it supports (plugin portal page, release notes). Distinguish four JDK concerns: daemon JVM, compilation toolchain, bytecode target (`options.release`), test runtime. A plugin that doesn't support the target Gradle blocks the wrapper upgrade until it's updated or replaced.
 5. **Write the report** from `report-template.md`. Each finding: rule ID, location, evidence, confidence, consequence, verification method, risk. Prioritize build blockers and measurable benefits over naming preferences. Measure representative timings before proposing performance-driven restructuring. Order candidates by *prerequisites*, then risk. "No changes recommended" is a valid result; don't inflate a best-practice score with speculative violations.
@@ -49,10 +52,14 @@ Helpers require Python 3.10+. Resolve `scripts/` and `references/` relative to t
 One group at a time. For each:
 
 - **Isolate the change.** Start from a clean tree (commit or stash pending work first, or note which files were already dirty). Make only the group's edits, so `git diff` shows exactly this group. Rollback is `git checkout -- <files>` plus removing any new files the group created. Don't stage or commit unless asked.
-- **Verify by comparing with the Phase 1 baseline.** Re-run the same commands and compare with `compare_runs.py compare`:
-   - Task membership and outcomes match (explain intentionally added build-logic compilation tasks with `--ignore-task`). Test identities and outcomes per task match, not just counts. No new deprecations.
-   - Dependency reports: resolved versions, selected variants/classifiers and classpath order match unless the group's stated purpose changes them. Use `dependencyInsight --dependency <module> --configuration <name>` for any difference. When publishing configuration changes, compare generated POM / `.module` metadata (generate locally, don't publish).
-   - Configuration cache groups: strict store-then-reuse pair as in Phase 1.
+- **Verify by comparing with the Phase 1 baseline.** Re-run the same command into a new directory and compare:
+   ```sh
+   python <skill>/scripts/gather_facts.py <root> --tasks <same tasks> --out .gradle-modernization/group-<n> --compare-with .gradle-modernization/baseline [--ignore-task :build-logic:compileGroovyPlugins ...]
+   ```
+   Exit 0 means nothing unexpected changed. The comparison covers:
+   - Task membership and outcomes (explain intentionally added build-logic compilation tasks with `--ignore-task`). Test identities and outcomes per task, not just counts. No new deprecations.
+   - Dependency reports per configuration, with unified diffs in `dependency-diffs/`: resolved versions, selected variants/classifiers and classpath order must match unless the group's stated purpose changes them. Use `dependencyInsight --dependency <module> --configuration <name>` for any difference. When publishing configuration changes, compare generated POM / `.module` metadata (generate locally, don't publish).
+   - Configuration cache: the new run's own strict store-then-reuse pair must pass, as in Phase 1.
    - Reproducibility claims (Sec4): rebuild with `--no-build-cache --rerun-tasks` into a clean checkout and compare `sha256sum` of artifacts. Comparing a cached output with itself proves nothing.
    - If Gradle can't run, say so and hand the user the exact commands and expected outputs; don't mark the group verified.
 - **Show a diff summary** and the comparison result. If anything regressed, roll the group back and report.
@@ -93,7 +100,3 @@ Since 9.6.0 Groovy DSL coerces `String → File` and single value → `ListPrope
 - Adopting `@Incubating` APIs in shared build logic without saying so (practice G9).
 - `ENHANCED_GRAPH_ORDERING` / `NO_IMPLICIT_LOOKUP_IN_PARENT_PROJECTS` feature previews unless the user wants to test Gradle 10 behaviour early — they change classpath order and property resolution.
 - Bumping Java targets, adding `-Werror`, changing test frameworks, or raising parallelism as part of "modernization" — those are policy changes to offer separately.
-
-## Maintenance
-
-`LATEST_GRADLE` / `LAST_VERIFIED` record the documentation review date. Use version-pinned official sources for API claims. When updating rules, run `python -B scripts/test_audit.py` and `python -B -m unittest discover -s scripts -p 'test_*.py'`. `scripts/test_recipes.py --gradle <launcher>` runs the recipes against a real Gradle (see `references/verification.md`). `evals/` holds agent-level scenarios.

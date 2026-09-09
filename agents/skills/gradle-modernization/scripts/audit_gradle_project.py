@@ -767,23 +767,39 @@ class Audit:
 
 
 # ----------------------------------------------------------------------------- main
-def main(argv):
-    if len(argv) < 2:
-        print(__doc__); return 2
-    root = Path(os.path.abspath(argv[1]))
+def audit(root: Path) -> Audit:
+    """Run every static check on ROOT; raises ValueError when ROOT is not a Gradle build root."""
+    root = Path(os.path.abspath(root))
     a = Audit(root)
     if not a.fs.is_dir(root):
-        print(f"error: {root} is not a directory", file=sys.stderr); return 2
+        raise ValueError(f"{root} is not a directory")
     if not any(a.fs.exists(root / f) for f in ("settings.gradle", "settings.gradle.kts", "build.gradle", "build.gradle.kts")):
-        print(f"error: {root} has no settings.gradle or build.gradle — not a Gradle build root?", file=sys.stderr); return 2
+        raise ValueError(f"{root} has no settings.gradle or build.gradle — not a Gradle build root?")
     a.run()
     seen, findings = set(), []
     for f in a.findings:
         k = (f.id, f.message, f.where, f.build)
         if k not in seen:
             seen.add(k); findings.append(f)
+    a.findings = findings
+    return a
+
+
+def result(a: Audit) -> dict:
+    """The JSON document written by --json and consumed by gather_facts.py."""
+    return json.loads(json.dumps({"facts": a.facts, "findings": [asdict(f) for f in a.findings]}, default=str))
+
+
+def main(argv):
+    if len(argv) < 2:
+        print(__doc__); return 2
+    try:
+        a = audit(Path(argv[1]))
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr); return 2
+    root, findings = a.root, a.findings
     if "--json" in argv:
-        print(json.dumps({"facts": a.facts, "findings": [asdict(f) for f in findings]}, indent=2, default=str)); return 0
+        print(json.dumps(result(a), indent=2)); return 0
     print(f"== Gradle static audit: {root} ==  (read-only; no Gradle executed)")
     for k, v in a.facts.items():
         print(f"  {k}: {v}")
