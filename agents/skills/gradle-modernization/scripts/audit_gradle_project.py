@@ -230,7 +230,7 @@ class Audit:
         self.discover()
         rootb = self.builds[0]
         ids = [f"{prefix}{n}" for prefix, count in (("G", 9), ("S", 5), ("D", 9), ("T", 11),
-                                                    ("P", 5), ("Sec", 4), ("Te", 1), ("C", 2))
+                                                    ("P", 5), ("Sec", 4), ("Te", 1), ("C", 3))
                for n in range(1, count + 1)]
         ids += sorted({row[0] for row in self.RULES} - set(ids))
         for b in self.builds:
@@ -253,6 +253,7 @@ class Audit:
         for b in self.builds:
             self.active_build = b
             self.check_locking(b)
+            self.check_mockito(b)
         self.facts.update(rootb.facts)
         self.active_build = rootb
         self.cover(rootb, ["G2", "P5", "Sec1"], [self.root / "gradle/wrapper/gradle-wrapper.properties"])
@@ -512,6 +513,8 @@ class Audit:
                             continue
                         if rid in ("T4", "T5", "P4") and parents & {"doFirst", "doLast"}:
                             continue
+                        if rid == "T5" and parents & {"asArguments"}:   # CommandLineArgumentProvider runs at execution time
+                            continue
                         ln = line_of(s, pos)
                         ev = raw.splitlines()[ln - 1].strip()[:120] if ln <= len(raw.splitlines()) else None
                         # Syntax does not establish receiver type, control flow, or policy.
@@ -735,6 +738,39 @@ class Audit:
         if dyn:
             self.add("C1", "medium", "likely", f"dynamic/range version declarations observed {dyn[:4]} — review locking", self.rel(b.dir))
         # Absence is not evidence of divergent classpaths; C2 needs dynamic comparison.
+
+    MOCKITO_DEP = re.compile(r"org\.mockito:mockito-(?:core|junit-jupiter|inline)\b|spring-boot-starter-test\b|\blibs(?:\.\w+)*\.(?:mockito|starter\.test)\b")
+
+    def check_mockito(self, b: Build):
+        """C3: a Mockito test dependency needs an explicit -javaagent on JDK 21+ (see best-practices.md).
+
+        Without it the inline mock maker self-attaches at test runtime. A sandboxed test JVM
+        cannot self-attach, so every mocked test fails, including the baseline. The check is
+        lexical: a Mockito coordinate, catalog alias or spring-boot-starter-test inside a
+        dependencies block, against any -javaagent mention of Mockito or a mockitoAgent
+        configuration anywhere in the build's scripts and convention plugins.
+        """
+        declared, agents, hide_only = [], [], []
+        sources = [p for kind, p in self.classify(b) if kind in ("project", "project-unlisted", "precompiled", "applied-script")]
+        for other in self.builds:
+            if other is not b and other.kind in ("included", "buildSrc"):
+                sources += [p for kind, p in self.classify(other) if kind == "precompiled"]
+        for p in sources:
+            src = self.source(p)
+            self.cover(b, ["C3"], [p])
+            for m in self.MOCKITO_DEP.finditer(src.text):   # coordinates are string literals; text keeps them, code masks them
+                if any("dependencies" in parent.split(".") for parent in src.parents(m.start())):
+                    declared.append(f"{self.rel(p)}:{line_of(src.text, m.start())}")
+                    break
+            if (re.search(r"-javaagent:", src.text) and re.search(r"(?i)mockito", src.text)) or re.search(r"\bmockitoAgent\b", src.code):
+                agents.append(self.rel(p))
+            if "EnableDynamicAgentLoading" in src.text:
+                hide_only.append(self.rel(p))
+        b.facts["mockito"] = {"declared_in": declared, "agent_in": agents, "enable_dynamic_agent_loading_in": hide_only}
+        if declared and not agents:
+            self.add("C3", "high", "likely", "Mockito test dependency without an explicit -javaagent: on JDK 21+ the inline mock maker "
+                     "self-attaches at test runtime, which a sandboxed test JVM cannot do; add the Mockito agent (C3) before the baseline"
+                     + (" (-XX:+EnableDynamicAgentLoading only hides the warning)" if hide_only else ""), declared[0])
 
 
 # ----------------------------------------------------------------------------- main

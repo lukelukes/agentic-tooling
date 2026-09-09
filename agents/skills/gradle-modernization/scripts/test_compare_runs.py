@@ -52,11 +52,15 @@ class CompareRuns(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertTrue(any("identities" in p for p in result["problems"]))
 
-    def test_cache_pair_requires_store_then_reuse(self):
-        a = write_run(self.root, "a", cache="Configuration cache entry stored.")
-        b = write_run(self.root, "b", cache="Reusing configuration cache.")
-        self.assertTrue(compare(a, b, cache_pair=True)["ok"])
-        self.assertFalse(compare(b, a, cache_pair=True)["ok"])
+    def test_cache_pair_requires_entry_then_reuse(self):
+        stored = write_run(self.root, "a", cache="Configuration cache entry stored.")
+        reused = write_run(self.root, "b", cache="Reusing configuration cache.")
+        neither = write_run(self.root, "c", cache="Calculating task graph as no cached configuration is available")
+        self.assertTrue(compare(stored, reused, cache_pair=True)["ok"])
+        self.assertTrue(compare(reused, reused, cache_pair=True)["ok"], "cache already on: baseline stored, both runs reuse")
+        self.assertFalse(compare(neither, reused, cache_pair=True)["ok"])
+        self.assertFalse(compare(stored, stored, cache_pair=True)["ok"])
+        self.assertFalse(compare(reused, stored, cache_pair=True)["ok"])
 
 
 if __name__ == "__main__":

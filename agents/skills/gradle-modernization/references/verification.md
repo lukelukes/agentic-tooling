@@ -19,6 +19,8 @@ Use one group per verification cycle. A regression then points to one change. Do
 
 The verification workload is the build and test part: `check`, `test`, custom `Test` tasks and `assemble`. It does not include `publish`, deploy, Docker push or release tasks. `publishToMavenLocal` writes to `~/.m2`. Run it only if a publication comparison is necessary.
 
+Before the first baseline, close the Mockito agent prerequisite (C3 in `best-practices.md`, Step 0 in `SKILL.md`). Run `gather_facts.py --static-only`, read `build_facts.<build>.mockito`, and wire the agent if Mockito is declared without one. A sandboxed test JVM cannot self-attach, so a baseline without the agent fails in every mocked test. The full run records a `[baseline]` gap while C3 is open.
+
 One command gathers everything:
 
 ```sh
@@ -74,7 +76,7 @@ For ad-hoc logs, use the embedded tools directly: `compare_runs.py summarize LOG
 ## Configuration cache
 
 `gather_facts.py` runs the workload twice with identical arguments: `--configuration-cache --configuration-cache-problems=fail --no-build-cache --rerun-tasks --console=plain --warning-mode=all`. It makes sure that:
-- The first run prints `Configuration cache entry stored.`
+- The first run prints `Configuration cache entry stored.`, or `Reusing configuration cache.` when the project already has the cache on and the baseline stored the entry.
 - The second run prints `Reusing configuration cache.`
 - The Test tasks execute in both runs.
 

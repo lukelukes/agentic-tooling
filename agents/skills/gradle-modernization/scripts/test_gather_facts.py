@@ -242,7 +242,27 @@ class EndToEnd(unittest.TestCase):
         code, out, facts = run(self.root, env={"FAKE_NO_STORE": "1"})
         self.assertEqual(code, 1)
         self.assertFalse(facts["dynamic"]["cc_pair"]["ok"])
-        self.assertIn("did not store", out)
+        self.assertIn("neither stored nor reused", out)
+
+    def test_open_c3_records_a_baseline_gap_before_the_run(self):
+        write_fixture(self.root)
+        (self.root / "app/build.gradle").write_text(FIXTURE["app/build.gradle"] +
+                                                   "dependencies { testImplementation 'org.mockito:mockito-core:5.18.0' }\n")
+        code, out, facts = run(self.root, "--skip-cc")
+        self.assertEqual(code, 0, out)
+        self.assertTrue(any(f["id"] == "C3" for f in facts["static"]["findings"]))
+        self.assertIn("C3 open", out)
+        self.assertEqual([g["phase"] for g in facts["gaps"] if "C3 open" in g["reason"]], ["baseline"])
+
+    def test_cache_already_on_reuses_in_both_runs(self):
+        write_fixture(self.root)
+        (self.root / ".fake-cc").write_text("x")  # the baseline already stored the entry
+        code, out, facts = run(self.root)
+        self.assertEqual(code, 0, out)
+        self.assertTrue(facts["dynamic"]["cc_pair"]["ok"])
+        self.assertFalse(facts["dynamic"]["cc-store"]["configuration_cache"]["stored"])
+        self.assertTrue(facts["dynamic"]["cc-store"]["configuration_cache"]["reused"])
+        self.assertIn("stored=False reused=True; pair OK", out)
 
     def test_compare_with_previous_run(self):
         write_fixture(self.root)

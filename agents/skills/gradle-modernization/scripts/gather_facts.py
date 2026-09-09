@@ -16,7 +16,8 @@ subsequent phases do not run. The summary shows the log tail of the failure:
   2. help --warning-mode=all                     deprecation warnings
   3. TASKS forced-execution baseline             --no-build-cache --rerun-tasks, existing
                                                  configuration-cache mode, test XML auto-mapped
-  4. TASKS twice, --configuration-cache          strict store-then-reuse pair
+  4. TASKS twice, --configuration-cache          entry-then-reuse pair (the first run may
+                                                 reuse an entry the baseline stored)
      --configuration-cache-problems=fail
   5. tasks --provenance (9.5+) or tasks --all    who registered each task
   6. dependencies per project                    split into one report per configuration
@@ -358,6 +359,9 @@ class Gatherer:
             return
         dyn.update(status="ran", version=parse_version_output(text), tasks=self.args.tasks,
                    configuration_cache_mode_in_properties=(self.facts["static"]["facts"].get("flags") or {}).get("org.gradle.configuration-cache"))
+        if any(row["id"] == "C3" for row in self.facts["static"]["findings"]):
+            self.gap("baseline", "C3 open: Mockito test dependency without an explicit -javaagent; a sandboxed test JVM cannot "
+                                 "self-attach, so mocked tests can fail in every run below. Apply the C3 prerequisite (SKILL.md Step 0) first")
         phases = [("deprecations", self.deprecations), ("baseline", self.baseline),
                   ("configuration-cache", self.configuration_cache), ("provenance", self.provenance),
                   ("dependencies", self.dependencies), ("buildEnvironment", self.build_environment)]

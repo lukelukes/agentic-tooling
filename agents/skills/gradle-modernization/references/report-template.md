@@ -61,6 +61,7 @@ Violated: <comma-separated IDs, for example G2, G3, D1, D2, D4, P2, P3, Sec1>
 
 Adjust the order by prerequisites. Example: a plugin that blocks the wrapper upgrade moves before the upgrade. For a major upgrade, go 8.x, then latest 8.x, then 9.x.
 
+0. Mockito agent prerequisite (C3). Applied before the baseline in its own diff. Report it as done, with the diff, not as a proposal.
 1. Clear current-version deprecations and update plugin compatibility. Then wrapper upgrade with checksum and `-bin` (G2, Sec1, P5).
 2. Flag centralization. New caching, parallelism, encoding or JVM policy are separate items (G5, P1, P2).
 3. Root project name. Remove subproject `gradle.properties` (G6, G7).

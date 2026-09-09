@@ -13,7 +13,7 @@ Examine every entry during a full audit. Mark each entry: ✅ followed · ❌ vi
 - [Performance](#performance) (5)
 - [Security](#security) (4)
 - [Testing](#testing) (1)
-- [Companion recommendations: dependency locking, consistent resolution](#companions)
+- [Companion recommendations: dependency locking, consistent resolution, Mockito agent](#companions)
 - [Version catalog cheat sheet](#catalog)
 - [Convention plugin skeleton](#conventions)
 
@@ -446,6 +446,39 @@ java {
 ```
 For alignment across a family of modules, for example all Jackson artifacts at one version, use a **platform**: `implementation platform(libs.jackson.bom)`. For producers without a BOM, use a `ComponentMetadataRule` that declares a virtual platform.
 **Risk:** Medium. Compile and runtime differences can be intentional. Investigate why runtime selected a higher version. Do not label every divergence as a defect. Do not force alignment without evidence.
+
+### C3. Pass the Mockito agent explicitly on JDK 21 and above (prerequisite, applied before the baseline)
+**Why:** Mockito's inline mock maker, the default since Mockito 5, needs a Java agent in the test JVM. Without `-javaagent` it self-attaches through the attach API at test runtime. JDK 21 prints `WARNING: A Java agent has been loaded dynamically` and Mockito prints `Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK`. Sandboxed agents cannot self-attach at all, so every test that creates a mock fails, including the baseline of this skill. A future JDK disables dynamic loading by default (JEP 451). `-XX:+EnableDynamicAgentLoading` only hides the warning. It does not help in a sandbox.
+**Detect:** `facts.build_facts.<build>.mockito` lists `declared_in` (`org.mockito:mockito-core`, `mockito-junit-jupiter`, `mockito-inline`, a `mockito` catalog alias or `spring-boot-starter-test`, which bundles Mockito) and `agent_in` (a `-javaagent` with Mockito, or a `mockitoAgent` configuration). Declared without an agent is the high finding `C3`. Dynamically: the two warnings above in the test output, or, in a sandbox, `Could not self-attach to current VM` in the Mockito stack trace of the failed tests.
+**Fix (Groovy, per project that declares Mockito, or once in the convention plugin). Verified on Gradle 9.7.1, JDK 21, strict configuration-cache store and reuse:**
+```groovy
+configurations {
+    mockitoAgent { transitive = false }        // the agent jar alone; byte-buddy stays on the test classpath as before
+}
+
+dependencies {
+    // existing test dependencies unchanged
+    mockitoAgent libs.mockito.core             // the same version source as testImplementation: catalog alias, or 'org.mockito:mockito-core:<version>'
+}
+
+abstract class JavaAgentArgument implements CommandLineArgumentProvider {
+    @Classpath abstract ConfigurableFileCollection getAgent()
+    @Override Iterable<String> asArguments() { ["-javaagent:${agent.asPath}".toString()] }
+}
+
+tasks.withType(Test).configureEach {
+    jvmArgumentProviders.add(objects.newInstance(JavaAgentArgument).tap { agent.from(configurations.mockitoAgent) })
+}
+```
+The provider resolves `mockitoAgent` at execution time and declares the jar as a `@Classpath` input of the Test task. The short form from the Mockito documentation also passes the strict pair. It resolves the configuration at configuration time (T5, P4):
+```groovy
+tasks.withType(Test).configureEach {
+    jvmArgs += "-javaagent:${configurations.mockitoAgent.asPath}"
+}
+```
+Do not use a Groovy closure: `jvmArgumentProviders.add({ [...] })` is not coerced to `CommandLineArgumentProvider` and fails at execution with `ClassCastException`, with or without the configuration cache. `({ ... } as CommandLineArgumentProvider)` runs without the cache but fails the strict pair with `invocation of 'configurations' references a Gradle script object from a Groovy closure at execution time`.
+A version-less `mockitoAgent 'org.mockito:mockito-core'` resolves only when something supplies the version to that configuration, for example the Spring dependency-management plugin. A `platform()` on `testImplementation` does not cover `mockitoAgent`.
+**Risk:** Low. The jar is the one already on the test classpath. The test output loses the two warnings. Nothing else changes. Test identities and outcomes must be equal before and after, except the tests that failed to self-attach in the sandbox.
 
 <a id="catalog"></a>
 ## Version catalog cheat sheet (`gradle/libs.versions.toml`)

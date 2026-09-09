@@ -8,7 +8,9 @@ summarize records every "> Task" line's outcome, the configuration-cache
 store/reuse markers, and (per Test task) the set of test cases with outcomes.
 compare reports task outcomes that changed, test cases that appeared,
 disappeared or changed outcome, and (with --cache-pair) checks that the first
-run stored a configuration-cache entry and the second reused it.
+run stored or reused a configuration-cache entry and the second reused one.
+A reuse on the first run is fine: the project may already have the cache on,
+so the baseline stored the entry. The reuse on the second run is the proof.
 
 Run Gradle with --console=plain so the log is line-oriented; add
 --no-build-cache --rerun-tasks when you want every task to actually execute.
@@ -95,8 +97,8 @@ def compare(before: dict, after: dict, cache_pair: bool = False, ignore_tasks: s
     if after["deprecations"] > before["deprecations"]:
         problems.append(f"deprecation warnings rose from {before['deprecations']} to {after['deprecations']}")
     if cache_pair:
-        if not before["configuration_cache"]["stored"]:
-            problems.append("first run did not store a configuration-cache entry")
+        if not (before["configuration_cache"]["stored"] or before["configuration_cache"]["reused"]):
+            problems.append("first run neither stored nor reused a configuration-cache entry")
         if not after["configuration_cache"]["reused"]:
             problems.append("second run did not reuse the configuration cache")
     return {"ok": not problems, "problems": problems, "changed_tasks": changed}

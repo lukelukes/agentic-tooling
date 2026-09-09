@@ -245,6 +245,29 @@ CASES = [
         findings=lambda rows: any(f["id"] == "C1" and f["where"] == "gradle.lockfile" and "no locked modules" in f["message"] for f in rows)
             and any(f["id"] == "C1" and f["severity"] == "low" and ":app" in f["message"] and "no locking declaration applies" in f["message"] for f in rows),
     ),
+    dict(
+        name="Mockito without an explicit -javaagent is a high C3 lead; EnableDynamicAgentLoading does not count as the agent",
+        files={"settings.gradle": "rootProject.name='m'\ninclude 'app', 'boot'\n", "gradle/wrapper/gradle-wrapper.properties": WRAPPER_OK,
+               "app/build.gradle": "plugins { id 'java' }\n// mockitoAgent in a comment does not count\ndependencies {\n  testImplementation 'org.junit.jupiter:junit-jupiter:5.13.4'\n  testImplementation 'org.mockito:mockito-core:5.18.0'\n}\n"
+                                   "tasks.withType(Test).configureEach { jvmArgs '-XX:+EnableDynamicAgentLoading' }\n",
+               "boot/build.gradle": "plugins { id 'java' }\ndependencies { testImplementation libs.spring.boot.starter.test }\n"},
+        must={"C3"},
+        findings=lambda rows: any(f["id"] == "C3" and f["severity"] == "high" and f["where"] == "app/build.gradle:5" and "hides the warning" in f["message"] for f in rows),
+        facts=lambda f: f["mockito"]["declared_in"] == ["app/build.gradle:5", "boot/build.gradle:2"] and f["mockito"]["agent_in"] == []
+            and f["mockito"]["enable_dynamic_agent_loading_in"] == ["app/build.gradle"],
+    ),
+    dict(
+        name="Mockito agent wired through a convention plugin satisfies C3; asPath inside asArguments() is not a T5 lead",
+        files={"settings.gradle": "pluginManagement { includeBuild 'build-logic' }\nrootProject.name='m'\ninclude 'app'\n", "gradle/wrapper/gradle-wrapper.properties": WRAPPER_OK,
+               "build-logic/settings.gradle": "rootProject.name='build-logic'\n", "build-logic/build.gradle": "plugins { id 'groovy-gradle-plugin' }\n",
+               "build-logic/src/main/groovy/java-conventions.gradle": "plugins { id 'java' }\nconfigurations { mockitoAgent { transitive = false } }\n"
+                   "abstract class JavaAgentArgument implements CommandLineArgumentProvider {\n  @Classpath abstract ConfigurableFileCollection getAgent()\n"
+                   "  @Override Iterable<String> asArguments() { [\"-javaagent:${agent.asPath}\".toString()] }\n}\n"
+                   "tasks.withType(Test).configureEach { jvmArgumentProviders.add(objects.newInstance(JavaAgentArgument).tap { agent.from(configurations.mockitoAgent) }) }\n",
+               "app/build.gradle": "plugins { id 'java-conventions' }\ndependencies { testImplementation libs.mockito.core; mockitoAgent libs.mockito.core }\n"},
+        must_not={"C3", "T5"},
+        facts=lambda f: f["mockito"]["declared_in"] == ["app/build.gradle:2"] and f["mockito"]["agent_in"] == ["app/build.gradle", "build-logic/src/main/groovy/java-conventions.gradle"],
+    ),
 ]
 
 

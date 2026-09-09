@@ -11,7 +11,7 @@ The work has two phases:
 1. **Audit and report.**
 2. **Apply changes, one approved group at a time.** After each group, make sure that build behavior did not change.
 
-Do not change build files before the user has seen the audit. A green build is not proof on its own. Make sure that the tests ran.
+Do not change build files before the user has seen the audit. The one exception is the Mockito agent prerequisite in Step 0, because without it the baseline itself fails in a sandbox. A green build is not proof on its own. Make sure that the tests ran.
 
 ## Scope
 
@@ -46,6 +46,15 @@ For a targeted question, read only the related reference section and answer. Exa
 
 ## Phase 1: Audit
 
+### Step 0. Test-runtime prerequisite: the Mockito agent (C3)
+
+Do this before the baseline. Sandboxed agents cannot self-attach a Java agent to the test JVM. On JDK 21 and above, Mockito's inline mock maker self-attaches at test runtime unless the build passes it as `-javaagent`. Without the agent, every test that creates a mock fails, and the baseline is red for a reason that has nothing to do with the build.
+
+1. Run the static scan first: `python <skill>/scripts/gather_facts.py <root> --static-only`. Read `static.facts.build_facts.<build>.mockito` and the `C3` finding. The scanner looks for `org.mockito:mockito-*`, a `mockito` catalog alias and `spring-boot-starter-test` inside `dependencies {}`, and for a `-javaagent` with Mockito or a `mockitoAgent` configuration anywhere in the build. `-XX:+EnableDynamicAgentLoading` only hides the JDK warning. It does not replace the agent.
+2. If Mockito is declared and no agent is wired, apply the C3 fix from `references/best-practices.md` to each project that declares Mockito, or once in the convention plugin. Use the typed `CommandLineArgumentProvider` form. A Groovy closure passed to `jvmArgumentProviders.add` is not coerced and fails at execution with a `ClassCastException`. A closure coerced with `as CommandLineArgumentProvider` fails the strict configuration-cache pair.
+3. Keep this change in its own diff. Tell the user that it was applied before the audit and why. It is the only build-file edit before the report.
+4. Then run Step 1. The full run records a `[baseline]` gap when C3 is still open, so that a red baseline in Mockito tests is attributed correctly.
+
 ### Step 1. Gather facts
 
 Identify the verification tasks first. These are `check`, `test` and custom `Test` tasks. Do not include `publish`, deploy or docker tasks. Then run:
@@ -64,7 +73,7 @@ The command does these steps in this order:
   - `--version`.
   - `help --warning-mode=all`. Deprecations are deduplicated.
   - The **baseline**: the verification tasks with `--no-build-cache --rerun-tasks --console=plain --warning-mode=all`, in the configuration-cache mode that the project has.
-  - The **configuration-cache pair**: the same tasks twice with `--configuration-cache --configuration-cache-problems=fail`. The first run must store. The second run must reuse. The tests must execute in both runs. The store run is compared with the baseline.
+  - The **configuration-cache pair**: the same tasks twice with `--configuration-cache --configuration-cache-problems=fail`. The first run must store or reuse an entry (it reuses when the project already has the cache on and the baseline stored it). The second run must reuse. The tests must execute in both runs. The store run is compared with the baseline.
   - `tasks --provenance` on 9.5 and later, else `tasks --all`.
   - `dependencies` for each project, split into one report per configuration. Configurations: compile, runtime, test, annotation processor and every other `*Classpath`. Missing configurations are recorded as N/A.
   - `buildEnvironment`.
