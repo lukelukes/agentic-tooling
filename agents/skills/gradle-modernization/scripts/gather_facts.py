@@ -40,9 +40,11 @@ import difflib
 import json
 import os
 import re
+import signal
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -146,26 +148,101 @@ class Gatherer:
             return str(path)
 
     def run(self, label, argv, cwd=None, log=None, timeout=None):
-        """Run a command, keep its full output in a log, record only metadata in facts."""
+        """Run a command, keep its full output in a log, record only metadata in facts.
+
+        Write directly to a file rather than PIPEs. Gradle workers inherit their
+        launcher's file descriptors; after a timeout, an inherited pipe can keep
+        subprocess.run() waiting in communicate() even though the wrapper died.
+        """
         started = time.time()
-        try:
-            proc = subprocess.run(argv, cwd=cwd or self.root, capture_output=True, text=True,
-                                  timeout=timeout or self.args.timeout, errors="replace")
-            text, code = proc.stdout + proc.stderr, proc.returncode
-        except subprocess.TimeoutExpired as error:
-            text = (error.stdout or "") + (error.stderr or "") + f"\n[gather_facts] timed out after {self.args.timeout}s\n"
-            code = -1
-        except (OSError, ValueError) as error:
-            text, code = f"[gather_facts] could not start: {error}\n", -2
-        log_path = None
-        if log:
-            log_path = self.out / log
+        limit = timeout if timeout is not None else self.args.timeout
+        log_path = self.out / log if log else None
+        if log_path:
             log_path.parent.mkdir(parents=True, exist_ok=True)
-            log_path.write_text(text)
+            output = log_path.open("w+", encoding="utf-8", errors="replace")
+            print(f"[gather_facts] {label}: running (timeout {limit}s; log {self.rel(log_path)})",
+                  file=sys.stderr, flush=True)
+        else:
+            output = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
+
+        proc = None
+        timed_out = False
+        try:
+            popen_options = {"start_new_session": True} if os.name != "nt" else {
+                "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP
+            }
+            proc = subprocess.Popen(argv, cwd=cwd or self.root, stdin=subprocess.DEVNULL,
+                                    stdout=output, stderr=subprocess.STDOUT, **popen_options)
+            deadline = time.monotonic() + limit
+            next_update = time.monotonic() + 30
+            while True:
+                now = time.monotonic()
+                if now >= deadline:
+                    timed_out = True
+                    self.terminate_process_tree(proc)
+                    break
+                try:
+                    code = proc.wait(timeout=min(0.5, deadline - now))
+                    break
+                except subprocess.TimeoutExpired:
+                    if log_path and time.monotonic() >= next_update:
+                        elapsed = int(time.time() - started)
+                        print(f"[gather_facts] {label}: still running after {elapsed}s (log {self.rel(log_path)})",
+                              file=sys.stderr, flush=True)
+                        next_update += 30
+            if timed_out:
+                code = -1
+        except (OSError, ValueError) as error:
+            output.write(f"[gather_facts] could not start: {error}\n")
+            code = -2
+        except KeyboardInterrupt:
+            if proc is not None:
+                self.terminate_process_tree(proc)
+            output.close()
+            raise
+        if timed_out:
+            output.write(f"\n[gather_facts] timed out after {limit}s; terminated the command process group\n")
+        output.flush()
+        output.seek(0)
+        text = output.read()
+        output.close()
+        elapsed = round(time.time() - started, 1)
+        if log_path:
+            state = f"timed out after {limit}s" if timed_out else f"finished with exit {code}"
+            print(f"[gather_facts] {label}: {state} in {elapsed}s", file=sys.stderr, flush=True)
         self.facts["commands"].append({"label": label, "argv": list(map(str, argv)), "cwd": str(cwd or self.root),
-                                       "exit": code, "seconds": round(time.time() - started, 1),
+                                       "exit": code, "seconds": elapsed,
                                        "log": self.rel(log_path) if log_path else None})
         return code, text, started
+
+    @staticmethod
+    def terminate_process_tree(proc):
+        """Terminate PROC and descendants that inherited the Gradle launch process group."""
+        if os.name == "nt":  # Best effort fallback; POSIX is the supported execution environment.
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=2)
+            return
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        deadline = time.monotonic() + 2
+        while proc.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        # The wrapper may have exited while a worker remains in the process group.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:  # pragma: no cover - SIGKILL should always win
+            proc.kill()
+            proc.wait()
 
     def gradle(self, label, arguments, log, cwd=None):
         return self.run(label, [*self.launcher, *arguments], cwd=cwd, log=log)

@@ -42,7 +42,7 @@ The baseline records the Gradle version, the launcher JVM, the daemon JVM and th
 
 Lifecycle tasks such as `check` are not execution evidence. Look at the tasks with actions, for example `:app:compileJava` and `:app:test`. A Test task that is `NO-SOURCE`, that produced no test cases, or that has stale XML is a lead. Investigate its `testClassesDirs` and `classpath` wiring. Do not accept it as a green build.
 
-The command stops at the first Gradle command that fails. It exits with code 1 and shows the log tail in the summary. The subsequent phases do not run. Tell the user which command failed. Do not run the command again with different flags.
+The command prints phase progress to stderr and writes Gradle output directly to the named log, which can be inspected while a long phase runs. It stops at the first Gradle command that fails. It exits with code 1 and shows the log tail in the summary. On timeout it terminates the launcher and its worker process group rather than leaving descendants alive. The subsequent phases do not run. Tell the user which command failed. Do not run the command again with different flags.
 
 Options:
 - `--static-only` skips Gradle.

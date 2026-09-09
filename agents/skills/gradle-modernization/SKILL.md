@@ -78,7 +78,7 @@ A test-like task is a blocker lead in each of these cases, even if the counts lo
 
 **Caution:** Gradle 9.0 can stop the execution of custom `Test` tasks without an error. This happens when the task inherited `testClassesDirs` or `classpath` from the `test` source set.
 
-The command stops at the first Gradle command that fails. It shows the log tail in the summary and exits with code 1. The subsequent steps do not run. Tell the user which command failed. Then stop. Do not run the command again with different flags. Do not make a green baseline with a different procedure.
+The command prints phase progress to stderr and writes each Gradle process directly to its log, so inspect the named log while a long phase runs. It stops at the first Gradle command that fails. It shows the log tail in the summary and exits with code 1. A timeout terminates the launcher's process group, including Gradle workers that could otherwise keep the command alive. The subsequent steps do not run. Tell the user which command failed. Then stop. Do not run the command again with different flags. Do not make a green baseline with a different procedure.
 
 Options: `--static-only`, `--skip-cc`, `--projects`, `--configurations`, `--timeout`. The timeout applies to each Gradle command. The default is 1800 s.
 

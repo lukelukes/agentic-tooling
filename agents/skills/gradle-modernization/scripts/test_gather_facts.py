@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -21,7 +22,7 @@ sys.path.insert(0, str(SCRIPTS))
 from gather_facts import deprecation_messages, parse_version_output, split_dependencies  # noqa: E402
 
 FAKE_LAUNCHER = r'''#!/usr/bin/env python3
-import os, sys, time
+import os, subprocess, sys, time
 from pathlib import Path
 args = sys.argv[1:]
 root = Path(os.environ["FAKE_ROOT"])
@@ -54,6 +55,11 @@ if any(a.endswith(":dependencies") for a in args):
         print("No configurations")
     done()
 # verification tasks
+if os.environ.get("FAKE_HANG"):
+    # This descendant deliberately inherits stdout. A timeout implemented with
+    # capture_output can kill this wrapper and still hang waiting for the pipe.
+    subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    time.sleep(60)
 if os.environ.get("FAKE_FAIL"):
     print("> Task :app:compileJava FAILED\n\nFAILURE: Build failed with an exception.\n\nBUILD FAILED in 1s"); sys.exit(1)
 if "--configuration-cache" in args:
@@ -200,6 +206,19 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(facts["dynamic"]["stopped_after"], "baseline")
         self.assertNotIn("dependencies", facts["dynamic"], "the subsequent phases do not run after a failed baseline")
         self.assertIn("STOPPED", out)
+
+    def test_timeout_terminates_launcher_descendants(self):
+        write_fixture(self.root)
+        started = time.monotonic()
+        code, out, facts = run(self.root, "--timeout", "1", env={"FAKE_HANG": "1"})
+        elapsed = time.monotonic() - started
+        self.assertEqual(code, 1, out)
+        self.assertLess(elapsed, 8, "timeout must not wait for a descendant holding the output descriptor")
+        self.assertEqual(facts["dynamic"]["stopped_after"], "baseline")
+        baseline = next(c for c in facts["commands"] if c["label"] == "baseline")
+        self.assertEqual(baseline["exit"], -1)
+        self.assertIn("terminated the command process group", facts["dynamic"]["baseline"]["failure_tail"])
+        self.assertIn("[gather_facts] baseline: running", out)
 
     def test_failed_help_stops_before_baseline(self):
         write_fixture(self.root)
