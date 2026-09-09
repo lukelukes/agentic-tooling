@@ -36,13 +36,13 @@
     },
     {
       "id": 4,
-      "prompt": "Check configuration-cache compatibility. CI runs check, integrationTest, publish and dockerPush.",
+      "prompt": "Check configuration-cache compatibility. Our build runs check, integrationTest, publish and dockerPush.",
       "fixture": "evals/fixtures/release-side-effects",
       "expected_output": "Picks check + integrationTest as the verification workload, leaves publish/dockerPush out, checks strict store/reuse with forced task execution, and reports the release tasks as not covered.",
       "assertions": [
         "Release/upload tasks are not executed as part of verification",
         "Both store and reuse are checked with actual action-bearing task execution",
-        "Omitted CI workloads are documented"
+        "The report lists the omitted tasks"
       ]
     }
   ]

@@ -23,9 +23,9 @@ Do not change build files before the user has seen the audit. A green build is n
 
 ## Requirements
 
-- Python 3.10 or later for the helper scripts. Python 3.11 or later resolves catalog plugin aliases in the plugin inventory.
+- Python 3.11 or higher.
 - Resolve `scripts/` and `references/` relative to this skill directory, not to the audited project.
-- Write audit outputs and logs to a scratch directory in the project, for example `.gradle-modernization/`. Add it to `.gitignore` so that it stays out of the diff.
+- Write audit outputs and logs to a scratch directory in the project, for example `.gradle-modernization/`. Do not commit it.
 
 ## Reference files
 
@@ -36,6 +36,7 @@ Do not change build files before the user has seen the audit. A green build is n
 | `references/gradle-10-deprecations.md` | Every version transition and Gradle 10 readiness. Triage index with source links. |
 | `references/report-template.md` | Structure of the audit report. |
 | `references/verification.md` | Baseline capture, before/after comparison, configuration-cache check, dependency diff. |
+| `references/groovy-dsl-idioms.md` | Groovy DSL idioms for rewrites. Read it before you edit a build script in Phase 2. |
 | `scripts/gather_facts.py` | **The single fact-gathering command.** Runs the static scan, the plugin inventory and every Gradle command. Run it in Phase 1. Run it again with `--compare-with` after each Phase 2 group. |
 | `scripts/audit_gradle_project.py` | The static scanner that `gather_facts.py` embeds. Run it alone only for a static-only look. |
 | `scripts/compare_runs.py` | Log and JUnit XML summarizer and differ that `gather_facts.py` embeds. Use it directly for ad-hoc logs. |
@@ -47,10 +48,10 @@ For a targeted question, read only the related reference section and answer. Exa
 
 ### Step 1. Gather facts
 
-Identify the CI verification tasks first. These are `check`, `test` and custom `Test` tasks. Do not include `publish`, deploy or docker tasks. Then run:
+Identify the verification tasks first. These are `check`, `test` and custom `Test` tasks. Do not include `publish`, deploy or docker tasks. Then run:
 
 ```sh
-python <skill>/scripts/gather_facts.py <root> --tasks <ci tasks> [--test-xml :task=DIR ...]
+python <skill>/scripts/gather_facts.py <root> --tasks <tasks> [--test-xml :task=DIR ...]
 ```
 
 The command writes `<root>/.gradle-modernization/baseline/` and prints a summary. The output directory has its own `.gitignore`. Read the sections of `facts.json` that you need. Do not read the raw logs unless necessary.
@@ -59,10 +60,10 @@ The command does these steps in this order:
 
 - **Static.** The read-only scanner and a plugin inventory. `static.plugins` lists id, version, catalog alias, `apply plugin:` usage and buildscript classpath.
 - **Prerequisites.** `git status`, `java -version` and launcher resolution. The launcher is `gradlew`, or else `gradle` on PATH. A PATH launcher is recorded as a gap because the versions can differ.
-- **Dynamic.** Skipped with a recorded reason if Gradle cannot run. In that case, every "build-reported" line in the report is *not checked*. The dynamic steps are:
+- **Dynamic.** Skipped with a recorded reason if Gradle cannot run. In that case, each "build-reported" line in the report is *not checked*. The dynamic steps run in this order:
   - `--version`.
   - `help --warning-mode=all`. Deprecations are deduplicated.
-  - The **baseline**: the CI tasks with `--no-build-cache --rerun-tasks --console=plain --warning-mode=all`, in the configuration-cache mode that the project already has.
+  - The **baseline**: the verification tasks with `--no-build-cache --rerun-tasks --console=plain --warning-mode=all`, in the configuration-cache mode that the project has.
   - The **configuration-cache pair**: the same tasks twice with `--configuration-cache --configuration-cache-problems=fail`. The first run must store. The second run must reuse. The tests must execute in both runs. The store run is compared with the baseline.
   - `tasks --provenance` on 9.5 and later, else `tasks --all`.
   - `dependencies` for each project, split into one report per configuration. Configurations: compile, runtime, test, annotation processor and every other `*Classpath`. Missing configurations are recorded as N/A.
@@ -77,7 +78,7 @@ A test-like task is a blocker lead in each of these cases, even if the counts lo
 
 **Caution:** Gradle 9.0 can stop the execution of custom `Test` tasks without an error. This happens when the task inherited `testClassesDirs` or `classpath` from the `test` source set.
 
-A failed baseline is reported with the log tail in the summary and exit code 1. The configuration-cache pair is then skipped. Report the blocker. Do not make a green baseline by other means.
+The command stops at the first Gradle command that fails. It shows the log tail in the summary and exits with code 1. The subsequent steps do not run. Tell the user which command failed. Then stop. Do not run the command again with different flags. Do not make a green baseline with a different procedure.
 
 Options: `--static-only`, `--skip-cc`, `--projects`, `--configurations`, `--timeout`. The timeout applies to each Gradle command. The default is 1800 s.
 
@@ -201,7 +202,7 @@ Convention plugin extraction preserves behavior. It is not a policy change.
 
 ### Configuration cache
 
-- Enable the configuration cache only after store-then-reuse succeeds on the CI task set.
+- Enable the configuration cache only after store-then-reuse succeeds on the verification task set.
 - Mark incompatible tasks with `notCompatibleWithConfigurationCache('reason')`.
 - List the blocking plugins in the report. Do not keep the cache off without a statement.
 
@@ -215,22 +216,10 @@ These groups are medium or high risk: exclusion narrowing (D8), redundant depend
 
 ## Groovy DSL idioms for rewrites
 
-```groovy
-plugins { id 'java-library' }                        // declarative plugin application where valid
-dependencies { implementation libs.jackson.databind } // catalog alias
-tasks.register('myTask', Copy) { ... }               // register, not create or task x {}
-tasks.named('test', Test) { ... }                    // named, not eager test { }
-tasks.withType(JavaCompile).configureEach { ... }    // configureEach
-layout.buildDirectory.dir('reports')                 // not buildDir
-java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }  // keep the existing target; a bump is a policy change
-```
-
-Since 9.6.0, the Groovy DSL converts `String` to `File` and a single value to `ListProperty` on lazy properties. `task.workingDir = '../x'` is valid.
+Read `references/groovy-dsl-idioms.md` before you edit a build script. Each rewrite must use the lazy, declarative forms in that file.
 
 ## Do not recommend
 
 - Kotlin DSL. This is official practice G1, but it is out of scope by user decision. Mention it once as "not applied".
-- Isolated Projects for production. It is incubating in 9.7 and "not yet recommended". A diagnostic run needs both `--isolated-projects` and `-Dorg.gradle.isolated-projects.diagnostics=true`. The diagnostics property alone has no effect.
-- `@Incubating` APIs in shared build logic without a statement in the report (practice G9).
-- The `ENHANCED_GRAPH_ORDERING` and `NO_IMPLICIT_LOOKUP_IN_PARENT_PROJECTS` feature previews, unless the user wants to test Gradle 10 behavior early. They change classpath order and property resolution.
+- Feature previews or incubating features, for example Isolated Projects. If the user asks for one, tell the user that it is incubating. Make it a separate decision.
 - Java target bumps, `-Werror`, test framework changes or higher parallelism as part of "modernization". These are policy changes. Offer them separately.

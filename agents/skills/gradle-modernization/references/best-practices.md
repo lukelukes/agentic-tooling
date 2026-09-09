@@ -48,7 +48,7 @@ Put third-party plugin versions in `libs.versions.toml` under `[plugins]`. Put p
 **Risk:** Medium. The replacement can behave differently.
 
 ### G5. Set build flags in gradle.properties (added 9.0.0)
-**Detect:** `org.gradle.*` flags passed through CI scripts, `GRADLE_OPTS`, edited `gradlew` scripts, or `-D`/`--` flags in README instructions instead of the root `gradle.properties`.
+**Detect:** `org.gradle.*` flags in shell scripts, `GRADLE_OPTS`, edited `gradlew` scripts, or `-D`/`--` flags in README instructions, and not in the root `gradle.properties`.
 **Fix:** Keep the existing values. Centralize the flags that the build already uses. Example settings follow. Do not paste them as a bundle.
 ```properties
 org.gradle.caching=true
@@ -60,7 +60,7 @@ Put machine-specific overrides in `~/.gradle/gradle.properties`, outside version
 **Risk:** Low if you move equivalent settings. Medium if you change execution, cache or encoding policy.
 
 ### G6. Name Your Root Project (added 9.2.0)
-**Detect:** `settings.gradle` has no `rootProject.name = '...'`. Without it, the name is the directory name. The directory name is different between clones and CI checkouts. This breaks build cache keys, published coordinates and IDE project names.
+**Detect:** `settings.gradle` has no `rootProject.name = '...'`. Without it, the name is the directory name. The directory name is different between clones. This breaks build cache keys, published coordinates and IDE project names.
 **Fix:** Add `rootProject.name = 'my-service'` to `settings.gradle`. Put it after `pluginManagement {}` and `plugins {}` if they exist, because those blocks must come first. Otherwise make it the first statement.
 **Risk:** Low. Check `archivesName` and publication artifact IDs that can depend on the directory name.
 
@@ -118,7 +118,7 @@ include 'payment'
 project(':payment').projectDir = file('services/payment')
 ```
 If the hierarchy is wanted, make sure that the intermediate projects are intentional and do not apply `java`.
-**Risk:** Low to Medium. Project paths change. Update `project(':services:payment')` references and CI task paths.
+**Risk:** Low to Medium. Project paths change. Update `project(':services:payment')` references and documented task paths.
 
 ### S5. Use Convention Plugins (added 9.3.0)
 **Detect:** `subprojects {}` or `allprojects {}` blocks that configure plugins, dependencies or tasks. `apply from: "$rootDir/gradle/java.gradle"`. The same 20 lines in every `build.gradle`. `configure(subprojects.findAll { ... })`.
@@ -305,7 +305,7 @@ tasks.register('packageDocs', Zip) { from(gen) }          // task dependency inf
 
 ### P3. Use the Configuration Cache (added 9.1.0)
 **Detect:** `org.gradle.configuration-cache` absent or `false`. The build prints the "Configuration cache is not enabled…" prompt (9.0+).
-**Fix:** Follow `verification.md`: a baseline in the existing mode, then two identical strict configuration cache runs with real task execution on the CI workload. Fix the reported problems. Then enable the property only for the workload that passed. Warn mode can help with diagnosis, but it is not verification. Mark incompatible tasks with `notCompatibleWithConfigurationCache('reason')`. Report the workloads that cannot store or reuse. Graceful fallback is not cache compatibility.
+**Fix:** Follow `verification.md`: a baseline in the existing mode, then two identical strict configuration cache runs with real task execution on the verification workload. Fix the reported problems. Then enable the property only for the workload that passed. Warn mode can help with diagnosis, but it is not verification. Mark incompatible tasks with `notCompatibleWithConfigurationCache('reason')`. Report the workloads that cannot store or reuse. Graceful fallback is not cache compatibility.
 **Risk:** Medium. Each problem needs its own fix. The usual causes are T10 (Project in an action), T5 (eager resolution), or a plugin that needs an upgrade.
 
 ### P4. Avoid Expensive Computations in Configuration Phase (added 9.0.0)
@@ -338,13 +338,13 @@ tasks.named('jar', Jar) { manifest { attributes('Git-Hash': gitHash) } }   // pr
 **Risk:** Low.
 
 ### Sec2. Validate the Gradle Wrapper on every Upgrade (added 9.3.0, updated 9.6.0)
-**Detect:** No wrapper validation step in CI. `gradle-wrapper.jar` committed without verification.
-**Fix:** In CI, use `gradle/actions/wrapper-validation@v4` on GitHub Actions. On other CI systems, compare `sha256sum gradle/wrapper/gradle-wrapper.jar` with the wrapper jar checksum at https://gradle.org/release-checksums/ as a pipeline step. Locally, after `./gradlew wrapper`, run the wrapper task a second time, so that the new Gradle regenerates the jar.
+**Detect:** `gradle-wrapper.jar` committed without verification. The scanner does not check this. Pipeline configuration is out of scope.
+**Fix:** Compare `sha256sum gradle/wrapper/gradle-wrapper.jar` with the wrapper jar checksum at https://gradle.org/release-checksums/. After `./gradlew wrapper`, run the wrapper task a second time, so that the new Gradle regenerates the jar.
 **Risk:** Low.
 
 ### Sec3. Do not Run ./gradlew on Untrusted Projects (added 9.7.0)
-**Detect:** Advisory, CI-focused. `pull_request_target` workflows that run `./gradlew` on fork PRs with repository secrets.
-**Fix:** `settings.gradle`, `buildSrc`, included builds and plugins execute arbitrary code on every invocation, including `help`. Do not run fork PRs under `pull_request_target` with secrets. Use `pull_request` or a job without secrets. Wrapper validation (Sec2) covers only a modified wrapper jar. It does not cover build logic.
+**Detect:** Advisory. This skill does not check it. Pipeline configuration is out of scope. Mark it ➖.
+**Fix:** `settings.gradle`, `buildSrc`, included builds and plugins execute arbitrary code on each invocation, including `help`. Do not run `./gradlew` on untrusted changes with access to secrets. Wrapper validation (Sec2) covers only a modified wrapper jar. It does not cover build logic.
 **Risk:** Not applicable.
 
 ### Sec4. Build Output Should Be Byte-for-Byte Reproducible (added 9.7.0)
@@ -606,7 +606,7 @@ Verification for Part A: check the task origins where provenance is supported. T
 
 | Option | Snippet (in `java-conventions.gradle`) | What changes / what to check |
 |---|---|---|
-| Toolchain instead of `sourceCompatibility` | `java { toolchain { languageVersion = JavaLanguageVersion.of(N) } }` | Compiles with a provisioned JDK N instead of `JAVA_HOME`. Needs `foojay-resolver-convention` in settings for auto-provisioning. Make sure that CI has or gets that JDK. |
+| Toolchain, not `sourceCompatibility` | `java { toolchain { languageVersion = JavaLanguageVersion.of(N) } }` | Gradle compiles with a JDK N that it provisions, not with `JAVA_HOME`. Needs `foojay-resolver-convention` in settings for auto-provisioning. Make sure that the JDK is installed on the build machine, or that auto-provisioning is enabled. |
 | Raise Java target | `JavaLanguageVersion.of(21)` + `options.release = 21` | The bytecode level changes. Consumers on older JVMs break. Product decision. |
 | Compiler strictness | `options.compilerArgs.addAll(['-Xlint:all', '-Werror'])` | Existing warnings become build failures. Run first without `-Werror` and count the warnings. |
 | JUnit Platform | `useJUnitPlatform()` + `junit-platform-launcher` runtimeOnly | JUnit 4 tests need the vintage engine or a migration. The test count must not decrease. |

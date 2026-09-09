@@ -31,6 +31,8 @@ if "--version" in args:
     print(f"------------------------------------------------------------\nGradle {version}\n------------------------------------------------------------\n\nLauncher JVM:  21.0.2 (Vendor 21.0.2+13)\nDaemon JVM:    /opt/jdk21 (no JDK specified, using current Java home)\nOS:            Linux 6.0 amd64")
     sys.exit(0)
 if "help" in args:
+    if os.environ.get("FAKE_FAIL_HELP"):
+        print("FAILURE: Build failed with an exception.\n\nBUILD FAILED in 1s"); sys.exit(1)
     print("> Task :help\n\nThe Project.foo property has been deprecated. This is scheduled to be removed in Gradle 10.\nThe Project.foo property has been deprecated. This is scheduled to be removed in Gradle 10.\nThe bar method has been deprecated.")
     done()
 if "tasks" in args:
@@ -40,6 +42,8 @@ if "buildEnvironment" in args:
     print("> Task :buildEnvironment\n\nclasspath\nNo dependencies")
     done()
 if any(a.endswith(":dependencies") for a in args):
+    if os.environ.get("FAKE_FAIL_DEPS"):
+        print("FAILURE: Build failed with an exception.\n\nBUILD FAILED in 1s"); sys.exit(1)
     project = [a for a in args if a.endswith(":dependencies")][0]
     name = "app" if project.startswith(":app") else "root"
     lib = os.environ.get("FAKE_LIB_VERSION", "2.0")
@@ -193,7 +197,26 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("BUILD FAILED", facts["dynamic"]["baseline"]["failure_tail"])
         self.assertNotIn("cc-store", facts["dynamic"])
         self.assertIn("baseline build failed", out)
-        self.assertIn("dependencies", facts["dynamic"], "later phases still run after a failed baseline")
+        self.assertEqual(facts["dynamic"]["stopped_after"], "baseline")
+        self.assertNotIn("dependencies", facts["dynamic"], "the subsequent phases do not run after a failed baseline")
+        self.assertIn("STOPPED", out)
+
+    def test_failed_help_stops_before_baseline(self):
+        write_fixture(self.root)
+        code, out, facts = run(self.root, env={"FAKE_FAIL_HELP": "1"})
+        self.assertEqual(code, 1)
+        self.assertEqual(facts["dynamic"]["stopped_after"], "deprecations")
+        self.assertNotIn("baseline", facts["dynamic"])
+        self.assertIn("STOPPED", out)
+
+    def test_failed_dependencies_stops_before_build_environment(self):
+        write_fixture(self.root)
+        code, out, facts = run(self.root, "--skip-cc", env={"FAKE_FAIL_DEPS": "1"})
+        self.assertEqual(code, 1)
+        self.assertEqual(facts["dynamic"]["stopped_after"], "dependencies")
+        self.assertEqual(len(facts["dynamic"]["dependencies"]), 1, "stops at the first failed project report")
+        self.assertNotIn("build_environment", facts["dynamic"])
+        self.assertIn("STOPPED", out)
 
     def test_missing_store_fails_cache_pair(self):
         write_fixture(self.root)

@@ -17,7 +17,7 @@ Use one group per verification cycle. A regression then points to one change. Do
 
 ## Baseline
 
-List the CI commands. The verification workload is the build and test part: `check`, `test`, custom `Test` tasks and `assemble`. It does not include `publish`, deploy, Docker push or release tasks. `publishToMavenLocal` writes to `~/.m2`. Run it only if a publication comparison is necessary.
+The verification workload is the build and test part: `check`, `test`, custom `Test` tasks and `assemble`. It does not include `publish`, deploy, Docker push or release tasks. `publishToMavenLocal` writes to `~/.m2`. Run it only if a publication comparison is necessary.
 
 One command gathers everything:
 
@@ -42,7 +42,7 @@ The baseline records the Gradle version, the launcher JVM, the daemon JVM and th
 
 Lifecycle tasks such as `check` are not execution evidence. Look at the tasks with actions, for example `:app:compileJava` and `:app:test`. A Test task that is `NO-SOURCE`, that produced no test cases, or that has stale XML is a lead. Investigate its `testClassesDirs` and `classpath` wiring. Do not accept it as a green build.
 
-A failed baseline exits with code 1 and shows the log tail in the summary. The configuration-cache pair is skipped. The other phases still run.
+The command stops at the first Gradle command that fails. It exits with code 1 and shows the log tail in the summary. The subsequent phases do not run. Tell the user which command failed. Do not run the command again with different flags.
 
 Options:
 - `--static-only` skips Gradle.

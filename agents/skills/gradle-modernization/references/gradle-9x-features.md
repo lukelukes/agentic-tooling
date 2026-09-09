@@ -30,7 +30,7 @@ Upgrade guide: https://docs.gradle.org/9.7.1/userguide/upgrading_major_version_9
 
 | Tag | Feature | Action |
 |---|---|---|
-| **AUTO/ACT** | **Gradle needs JVM 17 or later to run.** Compilation and tests for Java 8 and later are still supported through toolchains. | If the daemon JVM is older than 17, set a daemon toolchain with `./gradlew updateDaemonJvm --jvm-version=21`. This is stable since 9.2. Or make sure that CI uses JDK 17 or later. Keep `java { toolchain { languageVersion = JavaLanguageVersion.of(N) } }` for the target of the project. |
+| **AUTO/ACT** | **Gradle needs JVM 17 or higher to run.** Toolchains continue to support compilation and tests for Java 8 and higher. | If the daemon JVM is older than 17, set a daemon toolchain with `./gradlew updateDaemonJvm --jvm-version=21`. This is stable since 9.2. Or make sure that the JVM that runs Gradle is 17 or higher. Keep `java { toolchain { languageVersion = JavaLanguageVersion.of(N) } }` for the target of the project. |
 | **AUTO** | **Groovy 4** is embedded. Gradle 8 had Groovy 3. This applies to `.gradle` build scripts. | Failures are rare. Examples: `Map` and GString coercions, removed `groovy.util` classes such as `XmlSlurper`, which is now `groovy.xml.XmlSlurper`, and `@Grab`. Run `./gradlew help --warning-mode=all` after the upgrade. |
 | **AUTO** | Kotlin 2.2 is embedded. The Gradle API has JSpecify nullability annotations. | This applies only to Kotlin build logic and binary plugins. |
 | **ACT** | **The configuration cache is the preferred mode.** Gradle asks you to enable it if it finds no incompatibilities. Unsupported workloads can fall back instead of fail. | Follow `verification.md`. Do a strict store and reuse check with actual task execution on the verification workload before you enable the property. Fallback is not proof of compatibility. |
@@ -57,10 +57,10 @@ Removals and behavior changes in 9.0.0 to examine in old builds. Source: the upg
 | **AUTO** | **Java 25 is supported** for the daemon JVM and for toolchains. | A toolchain can now target 25. Tooling API users must enable native access, JEP 472. |
 | **ACT** | **`--task-graph`** prints the task dependency tree without execution. It is incubating in 9.1.0 and stable in 9.4.0. | Use it during audits: `./gradlew build --task-graph`. It replaces third-party "taskTree" plugins. |
 | **ACT** | The project report shows the physical project locations. | `./gradlew projects` now shows if a subproject directory is non-standard. See the "Avoid empty projects" practice. |
-| **ACT** | **`--console=colored`** gives colors without progress bars. | Recommended for CI logs. Set `org.gradle.console=colored` in `gradle.properties` or in the CI `GRADLE_OPTS` variable. |
+| **ACT** | **`--console=colored`** gives colors without progress bars. | Use it for logs that are written to a file. Set `org.gradle.console=colored` in `gradle.properties`. |
 | **AUTO** | The rich console shows a "(N lines not showing)" indicator. | No action. |
 | **AUTO** | **Version-constraint conflict errors** are more precise. They include a suggested `dependencyInsight` command. | No action. Use the suggested command when a conflict occurs. |
-| **ACT** | **Configuration cache read-only mode**: `-Dorg.gradle.configuration-cache.read-only=true`. Gradle reuses entries and does not write entries. | Use it for PR or CI builds that must not pay the cost of entry storage. Main-branch builds store entries. PR builds are read-only. |
+| **ACT** | **Configuration cache read-only mode**: `-Dorg.gradle.configuration-cache.read-only=true`. Gradle reuses entries and does not write entries. | Use it for builds that must reuse entries and must not write entries. |
 | **AUTO** | The configuration cache is **reused when `-P` properties change**, if the build does not read the property at configuration time. | Use `providers.gradleProperty('x')` wired into task inputs. Do not read `project.findProperty('x')` at configuration time. The provider form keeps cache hits. |
 | **AUTO** | The encryption keystore uses the JVM default type. This is FIPS-compatible. | No action. |
 | **INFO** | `AttributeContainer.addAllLater()`, `Gradle.getBuildPath()`, `MavenPublication.pom.distributionManagement {}`. | `distributionManagement` is useful if you publish to GitHub Packages and want it in the POM. |
@@ -91,7 +91,7 @@ Removals and behavior changes in 9.0.0 to examine in old builds. Source: the upg
 
 | Tag | Feature | Action |
 |---|---|---|
-| **AUTO** | **The HTML test report is restructured.** Nested classes are shown under their outer class. Parameterized methods are grouped into a suite. Suites contain their classes. **Packages are no longer shown as containers.** Stdout and stderr are attached to the individual test, not to the class. | No action in the build. Tell users that the test report looks different. CI tooling that reads the HTML report can need an update. XML reports are unchanged. |
+| **AUTO** | **The HTML test report is restructured.** Nested classes are shown under their outer class. Parameterized methods are grouped into a suite. Suites contain their classes. **Packages are no longer shown as containers.** Stdout and stderr are attached to the individual test, not to the class. | No action in the build. Tell users that the test report looks different. Tools that read the HTML report can need a change. XML reports are unchanged. |
 | **AUTO** | Aggregate test reports through the `test-report-aggregation` plugin or `TestReport` support overlapping structures, with one tab per source. | No action. |
 | **ACT** | **The Problems report is rendered in the console** with `--warning-mode=all`. | Use `./gradlew help --warning-mode=all` in the audit to see deprecations inline. |
 | **AUTO** | Worker exit codes such as 137 are now explained, for example "likely SIGKILL / OOM". | If this message occurs, increase `org.gradle.jvmargs` or the worker memory. |
@@ -112,7 +112,7 @@ Removals and behavior changes in 9.0.0 to examine in old builds. Source: the upg
 | **AUTO** | **Java 26 is supported** for the daemon JVM and for toolchains. | A toolchain can target 26. |
 | **ACT** | **Non-class-based testing** on the JUnit Platform: `testDefinitionDirs`. Engines such as Cucumber can discover resource-based tests without a placeholder runner. | Propose a separate migration if it is useful. Do not delete product or test runner sources in this skill. Keep the engine configuration and the scenario selection. A build-only experiment can set `testDefinitionDirs` and the existing engine dependencies on the applicable test runtime configuration. Compare scenario identities and outcomes. Build success alone is not sufficient. |
 | **AUTO** | JUnit `TestReporter.publishEntry` and `publishFile` data is captured into the HTML report, in the Data and Attachments tabs, and into the XML report, in `<properties>` and `[[ATTACHMENT|path]]`. | No action. UI-test screenshots on failure now show in the report. |
-| **INFO** | `Test.addTestMetadataListener(TestMetadataListener)`. | Use it to copy attachments to CI artifact directories. |
+| **INFO** | `Test.addTestMetadataListener(TestMetadataListener)`. | Use it to copy attachments to an artifact directory. |
 | **AUTO** | Progress bars are ligature-safe and Unicode. OSC 9;4 native progress is supported in Ghostty and iTerm2. | No action. |
 | **AUTO** | The Problems HTML report is redesigned. `org.gradle.warning.mode=none` hides the report link. The report is still generated. | No action. |
 | **ACT** | **PMD plugin**: CSV, Code Climate and SARIF report formats. Configure them on the `Pmd` task, for example `tasks.named('pmdMain', Pmd) { reports { sarif.required = true } }`. | If PMD results go to a security dashboard, enable SARIF. |
@@ -134,11 +134,11 @@ Removals and behavior changes in 9.0.0 to examine in old builds. Source: the upg
 |---|---|---|
 | **ACT** | **Task provenance**: failure messages name the script or plugin that registered the task. `./gradlew tasks --provenance` and `help --task X` show it. | Use it in audits to find which `subprojects {}` block or legacy script defined a task. Do this before you extract convention plugins. |
 | **AUTO** | An INFO-level log message explains why Gradle rejected an existing daemon, for example an incompatible JVM. | Diagnostic only. |
-| **ACT** | **Wrapper download retries**: `retries=3` and `retryBackOffMs=1000` in `gradle-wrapper.properties`. Off by default. | Recommend them for CI with unreliable networks. |
+| **ACT** | **Wrapper download retries**: `retries=3` and `retryBackOffMs=1000` in `gradle-wrapper.properties`. Off by default. | Recommend them for unreliable networks. |
 | **INFO** | Type-safe accessors for precompiled **Kotlin** settings plugins. | Not applicable to the Groovy DSL. |
 | **ACT** | `gradle init --into <dir>` creates the target directory. | This applies only when you scaffold new projects. |
 | **INFO** | `DomainObjectCollection.disallowChanges()` locks a container. | Plugin authors can use it to protect configured collections. |
-| **ACT** | `GRADLE_DAEMON_BIND_ADDRESS` environment variable for restricted network setups. | Use it only if daemon connection problems occur in locked-down CI or containers. |
+| **ACT** | `GRADLE_DAEMON_BIND_ADDRESS` environment variable for restricted network setups. | Use it only if daemon connection problems occur in restricted networks or containers. |
 | **ACT** | `--develocity-url https://…` publishes a Build Scan without a change to the build. | This publishes build data to that URL. Do not add it as part of an audit unless the user wants scans. |
 | **AUTO** | `--help` output is grouped into sections. The Tooling API exposes help and version. The samples page is removed from the documentation. Examples are now inline. | No action. |
 
@@ -150,15 +150,15 @@ Removals and behavior changes in 9.0.0 to examine in old builds. Source: the upg
 | Tag | Feature | Action |
 |---|---|---|
 | **AUTO** | The configuration cache is reused across `org.gradle.project.*` system properties and `ORG_GRADLE_PROJECT_*` environment variables when the build does not read them at configuration time. This matches the 9.1 `-P` and 9.4 `gradle.properties` behavior. | No action. This increases cache hits for builds that pass many project properties. |
-| **ACT** | **`--non-interactive`** and `org.gradle.console.interactive=false` disable all prompts. | Set it on CI and for agent-driven builds. |
+| **ACT** | **`--non-interactive`** and `org.gradle.console.interactive=false` disable all prompts. | Set it for unattended and agent-driven builds. |
 | **AUTO** | The **`NO_COLOR`** environment variable is applied. | No action. |
 | **AUTO** | HTML test report columns can be sorted. | No action. |
 | **ACT** | **DEPRECATION: implicit property and method lookup in parent projects.** In the Groovy DSL, a `child/build.gradle` that refers to `foo` defined through `ext.foo` in the root now warns. `findProperty()`, `property()` and `hasProperty()` that resolve from a parent also warn. **Removed in Gradle 10.** Opt into the future behavior early with `enableFeaturePreview('NO_IMPLICIT_LOOKUP_IN_PARENT_PROJECTS')` in `settings.gradle`. | This is the most common Groovy DSL deprecation in multi-project builds. Fixes: move shared values to the root `gradle.properties` and read them with `providers.gradleProperty(...)`. Or move them into a convention plugin extension. Or refer to them explicitly as `rootProject.ext.foo`. The explicit reference is the least preferred fix. See `gradle-10-deprecations.md`. |
 | **AUTO** | **Groovy DSL type coercion for lazy properties**: `String` to `File`, `RegularFileProperty` or `DirectoryProperty`, relative to the project directory. Single `T` or `T[]` to `ListProperty<T>` or `SetProperty<T>`. | Assignments that caused an `IllegalArgumentException` now work. This makes plugin `Property<T>` migrations less disruptive for Groovy users. |
 | **INFO** | `validatePlugins` gives specific errors for `@Optional` misuse: no I/O annotation, or combined with `@Internal`. | Plugin authors. |
-| **AUTO** | **Lower I/O**: file-based journals are rewritten. Large gains on low-IOPS cloud CI storage such as EBS. | No action. Expect faster CI. |
+| **AUTO** | **Lower I/O**: file-based journals are rewritten. Large gains on low-IOPS storage, for example cloud block volumes. | No action. |
 | **AUTO** | `Wrapper.getNetworkTimeout()` is promoted. | No action. |
-| **ACT** | Documentation: the **Gradle on CI** section is back, with GitHub Actions, GitLab CI, Jenkins, TeamCity, CircleCI, Travis and Docker. New practices **Avoid afterEvaluate** and **Validate the Gradle Wrapper**, updated. | See `best-practices.md`. |
+| **ACT** | Documentation: new practices **Avoid afterEvaluate** and **Validate the Gradle Wrapper**, updated. | See `best-practices.md`. |
 
 <a id="970"></a>
 ## 9.7.0 / 9.7.1 (2026-08 / 2026-08-19), current

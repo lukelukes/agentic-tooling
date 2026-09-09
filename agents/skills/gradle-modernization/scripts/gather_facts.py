@@ -10,7 +10,8 @@ Usage: gather_facts.py ROOT [--tasks TASK ...] [--out DIR] [--gradle LAUNCHER]
 Static (never runs Gradle): the read-only scanner (audit_gradle_project.py) plus a
 plugin inventory (plugins {} ids/versions/aliases, apply plugin:, buildscript classpath).
 
-Dynamic, in order, each skipped with a recorded reason when it cannot run:
+Dynamic, in order. The run stops at the first Gradle command that fails. The
+subsequent phases do not run. The summary shows the log tail of the failure:
   1. LAUNCHER --version                          Gradle version, launcher/daemon JVM
   2. help --warning-mode=all                     deprecation warnings
   3. TASKS forced-execution baseline             --no-build-cache --rerun-tasks, existing
@@ -28,8 +29,9 @@ facts.json. Stdout is a short summary; --json prints facts.json instead. With
 identities, deprecations, configuration-cache pair, dependency reports) and unified
 diffs are written to dependency-diffs/.
 
-Exit 0 when every phase ran cleanly, 1 when a dynamic phase failed or a comparison
-found differences, 2 for bad arguments. facts.json is written in every case.
+Exit 0 when each phase ran cleanly, 1 when a Gradle command failed (the run stops
+there) or a comparison found differences, 2 for bad arguments. facts.json is written
+in all cases.
 """
 from __future__ import annotations
 
@@ -279,17 +281,22 @@ class Gatherer:
             return
         dyn.update(status="ran", version=parse_version_output(text), tasks=self.args.tasks,
                    configuration_cache_mode_in_properties=(self.facts["static"]["facts"].get("flags") or {}).get("org.gradle.configuration-cache"))
-        self.deprecations()
-        ok = self.baseline()
-        if ok and not self.args.skip_cc:
-            self.configuration_cache()
-        elif not ok:
-            self.gap("configuration-cache", "skipped because the baseline failed")
-        elif self.args.skip_cc:
-            self.gap("configuration-cache", "--skip-cc")
-        self.provenance()
-        self.dependencies()
-        self.build_environment()
+        phases = [("deprecations", self.deprecations), ("baseline", self.baseline),
+                  ("configuration-cache", self.configuration_cache), ("provenance", self.provenance),
+                  ("dependencies", self.dependencies), ("buildEnvironment", self.build_environment)]
+        for phase, step in phases:
+            if phase == "configuration-cache" and self.args.skip_cc:
+                self.gap("configuration-cache", "--skip-cc")
+                continue
+            step()
+            if self.failed:
+                self.stop(phase)
+                return
+
+    def stop(self, phase: str):
+        """Record that PHASE failed and that the subsequent phases did not run."""
+        self.facts["dynamic"]["stopped_after"] = phase
+        self.gap("dynamic", f"stopped after `{phase}` failed; the subsequent phases did not run")
 
     def deprecations(self):
         code, text, _ = self.gradle("deprecations", ["help", "--warning-mode=all", "--console=plain"], "deprecations.log")
@@ -345,7 +352,7 @@ class Gatherer:
         self.write("baseline.json", summary)
         self.facts["dynamic"]["baseline"] = self.digest(summary)
         if code != 0 or not summary["successful"]:
-            self.gap("baseline", "baseline build failed; report the blocker, do not manufacture a green baseline")
+            self.gap("baseline", "baseline build failed; tell the user. Do not make a green baseline")
             self.facts["dynamic"]["baseline"]["failure_tail"] = self.tail(text)
             self.failed = True
             return False
@@ -402,6 +409,7 @@ class Gatherer:
             self.gap("provenance", f"Gradle {version} < 9.5: task report has no --provenance; attribute tasks manually")
         if code != 0:
             self.gap("provenance", f"task report failed: {self.tail(text, 5)}")
+            self.failed = True
 
     def dependencies(self):
         wanted = self.args.configurations
@@ -425,8 +433,10 @@ class Gatherer:
                      "log": f"dependencies/{label}.log", "exit": code, "configurations": {}}
             if code != 0:
                 entry["error"] = self.tail(text, 5)
-                self.gap("dependencies", f"{label}: `{task}` failed (exit {code})")
+                self.gap("dependencies", f"{label}: `{task}` failed (exit {code}): {self.tail(text, 5)}")
                 self.failed = True
+                reports[label] = entry
+                break
             else:
                 sections = split_dependencies(text)
                 entry["configurations_seen"] = sorted(sections)
@@ -450,6 +460,7 @@ class Gatherer:
         self.facts["dynamic"]["build_environment"] = {"log": "buildEnvironment.log", "exit": code}
         if code != 0:
             self.gap("buildEnvironment", f"failed: {self.tail(text, 5)}")
+            self.failed = True
 
     # ---------------------------------------------------------------- comparison
     def compare_with(self, before_dir: Path):
@@ -545,8 +556,11 @@ class Gatherer:
             captured = sum(1 for e in deps.values() for c in e["configurations"].values() if isinstance(c, dict))
             na = [f"{k}:{c}" for k, e in deps.items() for c, v in e["configurations"].items() if v == "N/A"]
             failed = [k for k, e in deps.items() if e["exit"] != 0]
-            lines.append(f"  dependencies: {len(deps)} project(s), {captured} configuration report(s)" +
-                         (f"; N/A: {', '.join(na)}" if na else "") + (f"; FAILED: {', '.join(failed)}" if failed else ""))
+            if deps:
+                lines.append(f"  dependencies: {len(deps)} project(s), {captured} configuration report(s)" +
+                             (f"; N/A: {', '.join(na)}" if na else "") + (f"; FAILED: {', '.join(failed)}" if failed else ""))
+            if d.get("stopped_after"):
+                lines.append(f"  STOPPED: `{d['stopped_after']}` failed; the subsequent phases did not run. Tell the user.")
         if f["comparison"]:
             c = f["comparison"]
             lines.append(f"Comparison with {c['before']}: " + ("no differences" if c["ok"] else "DIFFERENCES"))
@@ -574,7 +588,7 @@ class Gatherer:
 def parse(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("root")
-    parser.add_argument("--tasks", nargs="+", default=DEFAULT_TASKS, help="CI verification tasks (default: check)")
+    parser.add_argument("--tasks", nargs="+", default=DEFAULT_TASKS, help="verification tasks (default: check)")
     parser.add_argument("--out", help="output directory (default ROOT/.gradle-modernization/baseline)")
     parser.add_argument("--gradle", help="launcher (default ROOT/gradlew, else gradle on PATH)")
     parser.add_argument("--static-only", action="store_true")

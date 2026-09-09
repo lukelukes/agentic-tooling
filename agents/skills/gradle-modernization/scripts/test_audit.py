@@ -51,9 +51,8 @@ CASES = [
             "app/build.gradle": "plugins { id 'java-conventions' }\n", "app/gradle.lockfile": "# This is a Gradle generated file for dependency locking.\nempty=annotationProcessor\n",
             "core/build.gradle": "plugins { id 'java-conventions' }\n", "core/gradle.lockfile": "# This is a Gradle generated file for dependency locking.\nempty=annotationProcessor\n",
             "api/build.gradle": "plugins { id 'java-conventions' }\n", "api/gradle.lockfile": "# This is a Gradle generated file for dependency locking.\nempty=annotationProcessor\n",
-            ".github/workflows/ci.yml": "steps:\n  - uses: gradle/actions/setup-gradle@v4\n",
         },
-        must_not={"D4", "D7", "G7", "dep", "Sec2", "G2", "P3", "P2", "C2", "S4", "S5"},
+        must_not={"D4", "D7", "G7", "dep", "G2", "P3", "P2", "C2", "S4", "S5"},
         # The included build is now checked independently; its own catalog/locking
         # absence must not be confused with the root project's effective configuration.
         findings=lambda rows: not any(f["id"] in {"D2", "C1"} and f["build"] == "." for f in rows),
@@ -70,12 +69,6 @@ CASES = [
         files={"settings.gradle": "rootProject.name='x'\n",
                "gradle/wrapper/gradle-wrapper.properties": "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.7.1-bin.zip\ndistributionSha256Sum=TODO\n"},
         facts=lambda f: f["distribution_sha256"] == "invalid",
-    ),
-    dict(
-        name="setup-gradle v4 with validate-wrappers:false is flagged",
-        files={"settings.gradle": "rootProject.name='x'\n", "gradle/wrapper/gradle-wrapper.properties": WRAPPER_OK,
-               ".github/workflows/ci.yml": "steps:\n  - uses: gradle/actions/setup-gradle@v4\n    with:\n      validate-wrappers: false\n"},
-        must={"Sec2"},
     ),
     dict(
         name="mixed DSL flagged as out of scope",
@@ -101,12 +94,6 @@ CASES = [
         },
         must={"G2", "G3", "G8", "D1", "D4", "D8", "9.6.0", "G7", "S4", "S5", "P4", "T5", "dep", "C1", "9.0.0", "P5", "Sec1", "D2", "G6"},
         facts=lambda f: f["subprojects"] == [":app", ":services:lib"],
-    ),
-    dict(
-        name="pull_request_target running gradlew is flagged",
-        files={"settings.gradle": "rootProject.name='x'\n", "gradle/wrapper/gradle-wrapper.properties": WRAPPER_OK,
-               ".github/workflows/pr.yml": "on: pull_request_target\nsteps:\n  - uses: gradle/actions/setup-gradle@v4\n  - run: ./gradlew build\n"},
-        must={"Sec3"},
     ),
     dict(
         name="nested included builds, nested buildSrc and cycle are discovered once",
@@ -202,13 +189,6 @@ CASES = [
         name="absence findings acknowledge plugin-supplied configuration",
         files={"settings.gradle": "plugins { id 'com.example.settings' version '1' }\n"},
         findings=lambda rows: all(f["confidence"] == "suspected" for f in rows if f["id"] in {"G6", "D2", "C1"}),
-    ),
-    dict(
-        name="workflow signals are not merged across unrelated files",
-        files={"settings.gradle": "rootProject.name='ci'\n",
-               ".github/workflows/issue.yml": "on: pull_request_target\njobs: {}\n",
-               ".github/workflows/build.yml": "on: push\nsteps:\n  - run: ./gradlew build\n"},
-        must_not={"Sec3"},
     ),
     dict(
         name="allprojects dependencyLocking block without activation locks nothing",

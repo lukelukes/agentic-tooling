@@ -8,7 +8,7 @@ Before **every version transition**:
 3. Include breaking changes and changed bundled-tool defaults, even if the current build shows no warning.
 4. If you cannot read the official sources, mark the upgrade coverage as incomplete.
 
-Collect the real list from the CI verification workload:
+Collect the real list from the verification workload:
 
 ```bash
 ./gradlew help --warning-mode=all          # deprecations and Problems report inline (9.3 and later)

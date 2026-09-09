@@ -255,10 +255,8 @@ class Audit:
             self.check_locking(b)
         self.facts.update(rootb.facts)
         self.active_build = rootb
-        self.check_ci()
         self.cover(rootb, ["G2", "P5", "Sec1"], [self.root / "gradle/wrapper/gradle-wrapper.properties"])
         self.cover(rootb, ["G5", "P1", "P2", "P3"], [self.root / "gradle.properties"])
-        self.cover(rootb, ["Sec2", "Sec3"], [Path(p) for p in self.fs.scanned if Path(p).is_relative_to(self.root / ".github/workflows")])
         self.active_build = None
         self.facts["build_facts"] = {self.rel(b.dir): b.facts for b in self.builds}
         self.facts["coverage"] = {
@@ -310,7 +308,7 @@ class Audit:
         daemon = self.root / "gradle" / "gradle-daemon-jvm.properties"
         self.facts["daemon_jvm_properties"] = self.fs.exists(daemon)
         if not self.facts["daemon_jvm_properties"] and not self.fs.unavailable(daemon):
-            self.add("9.2.0", "low", "confirmed", "No gradle/gradle-daemon-jvm.properties found; daemon selection may instead be pinned by CI")
+            self.add("9.2.0", "low", "confirmed", "No gradle/gradle-daemon-jvm.properties found; the daemon JVM is not pinned by the build")
 
     def check_dsl(self):
         kts = [self.rel(p) for b in self.builds for p in b.kts]
@@ -737,33 +735,6 @@ class Audit:
         if dyn:
             self.add("C1", "medium", "likely", f"dynamic/range version declarations observed {dyn[:4]} — review locking", self.rel(b.dir))
         # Absence is not evidence of divergent classpaths; C2 needs dynamic comparison.
-
-    def check_ci(self):
-        wf = self.root / ".github" / "workflows"
-        if not self.fs.is_dir(wf):
-            self.facts["ci"] = "no GitHub workflows found (other CI systems not inspected)"
-            return
-        self.facts["ci"] = []
-        for _, files in self.fs.walk(wf):
-            for p in files:
-                if p.suffix not in (".yml", ".yaml"):
-                    continue
-                txt = re.sub(r"(?m)^\s*#.*$", "", self.fs.read(p))
-                explicit = bool(re.search(r"uses\s*:\s*gradle/(?:actions/wrapper-validation|wrapper-validation-action)@", txt))
-                setup = re.search(r"uses\s*:\s*gradle/actions/setup-gradle@v?(\d+)", txt)
-                disabled = bool(re.search(r"validate-wrappers\s*:\s*false", txt))
-                self.facts["ci"].append({"file": self.rel(p), "wrapper_validation_action_observed": explicit,
-                                         "setup_gradle_major": int(setup.group(1)) if setup else None,
-                                         "validate_wrappers_disabled_observed": disabled,
-                                         "effective_job_protection": "not checked"})
-                if re.search(r"pull_request_target", txt) and re.search(r"\./gradlew", txt):
-                    self.add("Sec3", "high", "likely", "pull_request_target and ./gradlew in one workflow — inspect checkout ref, permissions, secrets and job conditions", p)
-                if explicit or (setup and int(setup.group(1)) >= 4 and not disabled):
-                    continue  # candidate only; never claim job-level validation from text presence
-                if setup and disabled:
-                    self.add("Sec2", "medium", "likely", "setup-gradle and validate-wrappers: false observed without explicit wrapper-validation; inspect jobs", p)
-                else:
-                    self.add("Sec2", "low", "suspected", "No known wrapper-validation declaration found in workflow; inspect reusable workflows and SHA-pinned actions", p)
 
 
 # ----------------------------------------------------------------------------- main
