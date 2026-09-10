@@ -4,7 +4,7 @@ Gradle 10 is not released as of September 2026. Source: [Gradle 9.7.1 upgrade gu
 
 Before **every version transition**:
 1. Read the minor upgrade guide, pinned to the target version, for each version boundary that you cross.
-2. For 8.x to 9.x, also read the [major upgrade guide](https://docs.gradle.org/9.7.1/userguide/upgrading_major_version_9.html) and the latest 8.x guide.
+2. For 8.x to 9.x, also read `gradle-9-deprecations.md`, the [major upgrade guide](https://docs.gradle.org/9.7.1/userguide/upgrading_major_version_9.html) and the latest 8.x guide.
 3. Include breaking changes and changed bundled-tool defaults, even if the current build shows no warning.
 4. If you cannot read the official sources, mark the upgrade coverage as incomplete.
 
@@ -106,7 +106,7 @@ This changes the lookup behavior. Do not enable it as part of ordinary cleanup. 
 
 ## Removed in 9.0
 
-These items apply to migrations from 8.x.
+These items apply to migrations from 8.x. `gradle-9-deprecations.md` has the full index of 8.x deprecations with source links, and the 9.0 changes that had no 8.x warning.
 
 - **Custom `Test` tasks can run zero tests without an error.** `tasks.register('integrationTest', Test)` no longer inherits `testClassesDirs` and `classpath` from the `test` source set. Set both explicitly: `testClassesDirs = sourceSets.integrationTest.output.classesDirs; classpath = sourceSets.integrationTest.runtimeClasspath`. The symptom is a green build with a lower test count. Compare the `TEST-*.xml` counts before and after the upgrade.
 - The Gradle daemon requires **JDK 17 or later**. Project toolchains can still target Java 8 and later.

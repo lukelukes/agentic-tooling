@@ -1,118 +1,87 @@
 ---
 name: gradle-modernization
-description: Audit a Java project's Gradle build (Groovy DSL) against Gradle 9.x features and the official best practices.
+description: Modernize a Java projects Gradle build configuration to use modern features and best practices.
 disable-model-invocation: true
 ---
 
-# Gradle Modernization (Groovy DSL, Gradle 9.x)
-
-The work has two phases:
-
-1. **Audit and report.**
-2. **Apply changes, one approved group at a time.** After each group, make sure that build behavior did not change.
-
-Do not change build files before the user has seen the audit. The one exception is the Mockito agent prerequisite in Step 0, because without it the baseline itself fails in a sandbox. A green build is not proof on its own. Make sure that the tests ran.
+# Gradle modernization
 
 ## Scope
+- Gradle Groovy DSL (`.gradle` files)
+- Kotlin DSL and Android/AGP are out of scope
 
-- DSL: Groovy (`.gradle` files).
-- Start version: usually 9.x, sometimes 8.x.
-- Target version: the latest 9.x release that all plugins support. This is not always the newest release.
-- Gradle below 8.x: write a staged migration plan from the official upgrade guides. Do not apply the 8.x/9.x recipes directly.
-- Kotlin DSL and Android/AGP are out of scope. In mixed builds, report them as coverage gaps.
-
-## Requirements
-
-- Python 3.11 or higher.
-- Resolve `scripts/` and `references/` relative to this skill directory, not to the audited project.
-- Write audit outputs and logs to a scratch directory in the project, for example `.gradle-modernization/`. Do not commit it.
+## Phases
+1. **Audit and report.**
+2. **Apply changes, one approved group at a time.** After each group, make sure that build behavior did not change.
 
 ## Reference files
 
 | File | Use |
 |---|---|
-| `references/gradle-9x-features.md` | Full audit, or a question about one 9.x version or feature. One section per version 9.0 to 9.7. Items tagged ACT, AUTO or INFO. |
+| `references/gradle-8x-features.md` | Builds that start on 8.x. |
+| `references/gradle-9x-features.md` | Full audit, or a question about one 9.x version or feature. One section per version 9.0 to 9.7. Only changes to act on and behavior changes that can break the build. |
 | `references/best-practices.md` | Full audit, or a question about one practice. 44 official practices plus companions C1 (dependency locking) and C2 (consistent resolution). Each has Detect, Fix and Risk. |
-| `references/gradle-10-deprecations.md` | Every version transition and Gradle 10 readiness. Triage index with source links. |
+| `references/gradle-9-deprecations.md` | 8.x to 9.x transition |
+| `references/gradle-10-deprecations.md` | Preparation for future 10.x release |
 | `references/report-template.md` | Structure of the audit report. |
-| `references/verification.md` | Baseline capture, before/after comparison, configuration-cache check, dependency diff. |
-| `references/groovy-dsl-idioms.md` | Groovy DSL idioms for rewrites. Read it before you edit a build script in Phase 2. |
-| `scripts/gather_facts.py` | **The single fact-gathering command.** Runs the static scan, the plugin inventory and every Gradle command. Run it in Phase 1. Run it again with `--compare-with` after each Phase 2 group. |
-| `scripts/audit_gradle_project.py` | The static scanner that `gather_facts.py` embeds. Run it alone only for a static-only look. |
-| `scripts/compare_runs.py` | Log and JUnit XML summarizer and differ that `gather_facts.py` embeds. Use it directly for ad-hoc logs. |
-| `evals/README.md` | Maintenance and tests for this skill. |
-
-For a targeted question, read only the related reference section and answer. Examples: "Why does 9.6 warn about `ext`?" or "Should I use `--console=colored`?". Do the full checklist only for an audit request.
+| `references/groovy-dsl-idioms.md` | Groovy DSL idioms |
 
 ## Phase 1: Audit
 
-### Step 0. Test-runtime prerequisite: the Mockito agent (C3)
+Run a subagent to gather facts for the other stages, output into `facts.json` file.
+For each command, using `jq` command, add additional facts into the file.
 
-Do this before the baseline. Sandboxed agents cannot self-attach a Java agent to the test JVM. On JDK 21 and above, Mockito's inline mock maker self-attaches at test runtime unless the build passes it as `-javaagent`. Without the agent, every test that creates a mock fails, and the baseline is red for a reason that has nothing to do with the build.
+### Step 0. Gather facts
+- java -v
+- ./gradlew --version
+- ./gradlew tasks --all
+- ./gradlew dependencies
 
-1. Run the static scan first: `python <skill>/scripts/gather_facts.py <root> --static-only`. Read `static.facts.build_facts.<build>.mockito` and the `C3` finding. The scanner looks for `org.mockito:mockito-*`, a `mockito` catalog alias and `spring-boot-starter-test` inside `dependencies {}`, and for a `-javaagent` with Mockito or a `mockitoAgent` configuration anywhere in the build. `-XX:+EnableDynamicAgentLoading` only hides the JDK warning. It does not replace the agent.
-2. If Mockito is declared and no agent is wired, apply the C3 fix from `references/best-practices.md` to each project that declares Mockito, or once in the convention plugin. Use the typed `CommandLineArgumentProvider` form. A Groovy closure passed to `jvmArgumentProviders.add` is not coerced and fails at execution with a `ClassCastException`. A closure coerced with `as CommandLineArgumentProvider` fails the strict configuration-cache pair.
-3. Keep this change in its own diff. Tell the user that it was applied before the audit and why. It is the only build-file edit before the report.
-4. Then run Step 1. The full run records a `[baseline]` gap when C3 is still open, so that a red baseline in Mockito tests is attributed correctly.
+### Step 1. Must apply changes
+- Mockito agent:
+```groovy
+configurations {
+    mockitoAgent { transitive = false }        // the agent jar alone; byte-buddy stays on the test classpath as before
+}
 
-### Step 1. Gather facts
+dependencies {
+    // existing test dependencies unchanged
+    mockitoAgent libs.mockito.core             // the same version source as testImplementation: catalog alias, or 'org.mockito:mockito-core:<version>'
+}
 
-Identify the verification tasks first. These are `check`, `test` and custom `Test` tasks. Do not include `publish`, deploy or docker tasks. Then run:
+abstract class JavaAgentArgument implements CommandLineArgumentProvider {
+    @Classpath abstract ConfigurableFileCollection getAgent()
+    @Override Iterable<String> asArguments() { ["-javaagent:${agent.asPath}".toString()] }
+}
 
-```sh
-python <skill>/scripts/gather_facts.py <root> --tasks <tasks> [--test-xml :task=DIR ...]
+tasks.withType(Test).configureEach {
+    jvmArgumentProviders.add(objects.newInstance(JavaAgentArgument).tap { agent.from(configurations.mockitoAgent) })
+}
+```
+The provider resolves `mockitoAgent` at execution time and declares the jar as a `@Classpath` input of the Test task. The short form from the Mockito documentation also passes the strict pair. It resolves the configuration at configuration time (T5, P4):
+```groovy
+tasks.withType(Test).configureEach {
+    jvmArgs += "-javaagent:${configurations.mockitoAgent.asPath}"
+}
+```
+- `gradle.properties`:
+```
+org.gradle.caching=true
+org.gradle.parallel=true
+org.gradle.configuration-cache=true
+org.gradle.configuration-cache.entries-per-key=5
+org.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1g
 ```
 
-The command writes `<root>/.gradle-modernization/baseline/` and prints a summary. The output directory has its own `.gitignore`. Read the sections of `facts.json` that you need. Do not read the raw logs unless necessary.
-
-The command does these steps in this order:
-
-- **Static.** The read-only scanner and a plugin inventory. `static.plugins` lists id, version, catalog alias, `apply plugin:` usage and buildscript classpath.
-- **Prerequisites.** `git status`, `java -version` and launcher resolution. The launcher is `gradlew`, or else `gradle` on PATH. A PATH launcher is recorded as a gap because the versions can differ.
-- **Dynamic.** Skipped with a recorded reason if Gradle cannot run. In that case, each "build-reported" line in the report is *not checked*. The dynamic steps run in this order:
-  - `--version`.
-  - `help --warning-mode=all`. Deprecations are deduplicated.
-  - The **baseline**: the verification tasks with `--no-build-cache --rerun-tasks --console=plain --warning-mode=all`, in the configuration-cache mode that the project has.
-  - The **configuration-cache pair**: the same tasks twice with `--configuration-cache --configuration-cache-problems=fail`. The first run must store or reuse an entry (it reuses when the project already has the cache on and the baseline stored it). The second run must reuse. The tests must execute in both runs. The store run is compared with the baseline.
-  - `tasks --provenance` on 9.5 and later, else `tasks --all`.
-  - `dependencies` for each project, split into one report per configuration. Configurations: compile, runtime, test, annotation processor and every other `*Classpath`. Missing configurations are recorded as N/A.
-  - `buildEnvironment`.
-- **JUnit XML.** Mapped automatically from `build/test-results/<task>`. Use `--test-xml :task=DIR` for relocated reports.
-
-A test-like task is a blocker lead in each of these cases, even if the counts look correct:
-- The task has no XML.
-- The XML is older than the run (`stale_xml`).
-- The task outcome is `NO-SOURCE`.
-- The XML directory is missing.
-
-**Caution:** Gradle 9.0 can stop the execution of custom `Test` tasks without an error. This happens when the task inherited `testClassesDirs` or `classpath` from the `test` source set.
-
-The command prints phase progress to stderr and writes each Gradle process directly to its log, so inspect the named log while a long phase runs. It stops at the first Gradle command that fails. It shows the log tail in the summary and exits with code 1. A timeout terminates the launcher's process group, including Gradle workers that could otherwise keep the command alive. The subsequent steps do not run. Tell the user which command failed. Then stop. Do not run the command again with different flags. Do not make a green baseline with a different procedure.
-
-Options: `--static-only`, `--skip-cc`, `--projects`, `--configurations`, `--timeout`. The timeout applies to each Gradle command. The default is 1800 s.
-
-### Step 2. Interpret the facts
-
-- `facts.gaps` and `static.facts.coverage` list skipped paths, unreadable paths, Kotlin DSL, dynamic includes and unsupported syntax. These are gaps, not passes.
-- The scanner is lexical. It masks strings and comments but does not evaluate Groovy. Use these confidence levels:
-  - **confirmed**: a directly observed fact.
-  - **likely**: an executable pattern.
-  - **suspected**: a heuristic.
-- Check the applicability of each finding against the actual receiver. Dependency, plugin, buildscript and publishing repositories are different things.
-- Use `static.facts.build_facts` and the `build` identity of each finding for the settings, catalog and locking checks of included builds.
-- `build_facts.<build>.locking` lists, for each project: the script that declares locking, whether it activates locking with `lockAllConfigurations()` or `activateDependencyLocking()`, and whether `gradle.lockfile` exists and has entries. A `dependencyLocking {}` block that only sets `lockMode` locks nothing. Locking in `allprojects {}` with lock files in only some projects is a C1 finding, not a pass.
-- The scanner does not follow symlinks and does not read outside `<root>`. If `settings.gradle` includes an external build, gather facts for that build separately.
-- A platform or aggregation project has no `runtimeClasspath`. Record it as N/A.
-
-### Step 3. Walk the references
+### Step 2. Walk the references
 
 1. Read `best-practices.md` from top to bottom. Mark each practice: ✅ followed, ❌ violated, ➖ N/A, ❓ not checked, ⚠ suspected (scanner lead, not verified).
-2. Read `gradle-9x-features.md` for every version between the current version and the target version.
-3. For **every version transition**, also read `gradle-10-deprecations.md` and the official upgrade guide pinned to the target version. For 8.x to 9.x, also read the major upgrade guide and the latest 8.x guide.
+2. Read `gradle-9x-features.md` for every version between the current version and the target version. If the current version is 8.x, start with `gradle-8x-features.md` from the current version to 8.14, then continue with `gradle-9x-features.md` §9.0.0.
+3. For **every version transition**, also read `gradle-10-deprecations.md` and the official upgrade guide pinned to the target version. For 8.x to 9.x, also read `gradle-9-deprecations.md`, the major upgrade guide and the latest 8.x guide.
 4. Review breaking changes and changed bundled-tool defaults, even if the build shows no warnings.
 5. Do not infer a removal deadline from a chapter title.
 
-### Step 4. Plugin compatibility inventory
+### Step 3. Plugin compatibility inventory
 
 This step is mandatory when the target version differs from the current version.
 
@@ -120,7 +89,7 @@ This step is mandatory when the target version differs from the current version.
 - Keep four JDK concerns separate: daemon JVM, compilation toolchain, bytecode target (`options.release`) and test runtime.
 - A plugin that does not support the target Gradle blocks the wrapper upgrade. Update or replace the plugin first.
 
-### Step 5. Write the report
+### Step 4. Write the report
 
 Use `report-template.md`. For each finding, give: rule ID, location, evidence, confidence, consequence, verification method and risk.
 
@@ -144,27 +113,6 @@ Apply one group at a time. For each group:
 - Rollback: `git checkout -- <files>` and remove the new files that the group created.
 - Do not stage or commit unless the user asks.
 
-### Compare with the Phase 1 baseline
-
-Run the same command into a new directory and compare:
-
-```sh
-python <skill>/scripts/gather_facts.py <root> --tasks <same tasks> --out .gradle-modernization/group-<n> --compare-with .gradle-modernization/baseline [--ignore-task :build-logic:compileGroovyPlugins ...]
-```
-
-Exit code 0 means that nothing unexpected changed. The comparison covers:
-
-- Task membership and outcomes. Use `--ignore-task` for build-logic compilation tasks that the group adds on purpose. Test identities and outcomes per task, not only counts. No new deprecations.
-- Dependency reports per configuration, with unified diffs in `dependency-diffs/`. Resolved versions, selected variants, classifiers and classpath order must be equal, unless the stated purpose of the group changes them. Use `dependencyInsight --dependency <module> --configuration <name>` for each difference. If the group changes publishing configuration, compare the generated POM and `.module` metadata. Generate them locally. Do not publish.
-- Configuration cache. The strict store-then-reuse pair of the new run must pass, as in Phase 1.
-- Reproducibility claims (Sec4). Rebuild with `--no-build-cache --rerun-tasks` in a clean checkout and compare the `sha256sum` of the artifacts. A comparison of a cached output with itself proves nothing.
-
-If Gradle cannot run, say so. Give the user the exact commands and the expected outputs. Do not mark the group as verified.
-
-### Report the result
-
-Show a diff summary and the comparison result. If anything regressed, roll the group back and report it.
-
 ## Group-specific rules
 
 ### Wrapper upgrades
@@ -173,7 +121,7 @@ Do the steps in this order:
 
 1. Clear the deprecation warnings on the current version.
 2. Update or replace the plugins that do not support the target version.
-3. For 8.x to 9.x: move to the latest 8.x first and clear its warnings. The upgrade guide recommends this.
+3. For 8.x to 9.x: move to the latest 8.x first, 8.14.5, and clear its warnings with `gradle-9-deprecations.md`. The upgrade guide recommends this. 8.14.4 fixed two security advisories, so 8.14.3 and earlier are not acceptable intermediate versions.
 4. Run `./gradlew wrapper --gradle-version=<target> --gradle-distribution-sha256-sum=<sha>`. Get the checksum from https://gradle.org/release-checksums/. Run the command a second time so that the new Gradle regenerates the wrapper jar and scripts.
 5. Run `help --warning-mode=all` on the new version.
 

@@ -1,1 +1,0 @@
-Static review fixture. No wrapper JAR is supplied. Execution is not authorized. Corporate policy uses programmatic catalogs, underscore aliases and per-configuration locking on purpose. Do not create cleanup changes from preferences or from incomplete dynamic coverage.

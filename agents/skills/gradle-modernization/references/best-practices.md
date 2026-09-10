@@ -28,7 +28,7 @@ Examine every entry during a full audit. Mark each entry: ✅ followed · ❌ vi
 ### G2. Use the Latest Minor Version of Gradle (added 8.14)
 **Detect:** Compare `distributionUrl` in `gradle/wrapper/gradle-wrapper.properties` with the current latest release. The latest release is 9.7.1 as of September 2026. Check https://gradle.org/releases/. Also flag `.0` releases that have a `.1` patch: 9.2.1, 9.3.1, 9.4.1, 9.6.1, 9.7.1.
 **Fix:** Follow the wrapper upgrade sequence in SKILL.md. Use an exact compatible target version and its distribution checksum. Run the wrapper task two times. Then run `./gradlew help --warning-mode=all` and the verification workload.
-**Risk:** Depends on the plugins, also inside 9.x, because incubating APIs can change. Medium to High for 8.x to 9.x: JDK 17 daemon, Groovy 4, reproducible archives, removed APIs. Read `gradle-9x-features.md` §9.0.0.
+**Risk:** Depends on the plugins, also inside 9.x, because incubating APIs can change. Medium to High for 8.x to 9.x: JDK 17 daemon, Groovy 4, reproducible archives, removed APIs. Read `gradle-9x-features.md` §9.0.0 and `gradle-9-deprecations.md`.
 
 ### G3. Apply Plugins Using the plugins Block (added 8.14)
 **Detect:** `apply plugin: 'java'`, `apply plugin: JavaPlugin`, `buildscript { dependencies { classpath '...' } }` used only to load plugins, `apply from: 'x.gradle'` scripts that apply plugins.

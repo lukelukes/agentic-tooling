@@ -48,11 +48,6 @@ Violated: <comma-separated IDs, for example G2, G3, D1, D2, D4, P2, P3, Sec1>
 
 ### 2. ...
 
-## Information only, no action
-- <9.x features that apply to this project but need no change. Example: "9.3.0 restructured the HTML test report; scripts/parse-tests.sh parses it">
-- <Isolated Projects: optional diagnostics run>
-- <Kotlin DSL practice: out of scope>
-
 ## Deferred, needs a human decision
 - <Product source and test edits, publication coordinates, behavior changes, experimental feature previews>
 ```

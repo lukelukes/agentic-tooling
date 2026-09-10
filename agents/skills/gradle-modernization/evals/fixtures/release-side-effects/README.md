@@ -1,1 +1,0 @@
-Do not contact the fixture endpoints. A trusted runner can mock the approved local verification commands. It must block all network effects and record attempted uploads. No wrapper JAR is supplied. Without that runner, do a static-only assessment and state the missing execution evidence.
