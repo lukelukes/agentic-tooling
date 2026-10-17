@@ -36,6 +36,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterable
 from concurrent import futures
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -122,8 +123,18 @@ def cache_link_name(plugin: str, skill: Path, root: Path) -> str:
     return skill.name if skill.name == plugin else f"{plugin}-{skill.name}"
 
 
-def plugin_cache_skills() -> list[tuple[str, Path]]:
-    """(link name, skill directory) for every skill in an installed, enabled plugin.
+@dataclass(frozen=True)
+class CacheSkill:
+    """One skill inside an installed third-party plugin, and where it came from."""
+
+    link: str  # what to call it in the flat cross-tool roots
+    path: Path  # the skill directory in the plugin cache
+    pid: str  # the plugin's qualified id, <name>@<marketplace>
+    inner: str  # the skill's path inside the plugin; "" when it is the plugin root
+
+
+def plugin_cache_skills() -> list[CacheSkill]:
+    """Every skill in an installed, enabled plugin.
 
     Deliberately *not* linked into ~/.claude/skills: Claude Code already loads
     these from the plugin itself, and a copy there would list the same skill
@@ -134,7 +145,7 @@ def plugin_cache_skills() -> list[tuple[str, Path]]:
     plugin's listing cost without uninstalling it, so it should mean the skill
     is gone from every tool, not just this one.
     """
-    out: list[tuple[str, Path]] = []
+    out: list[CacheSkill] = []
     for plugin in installed_plugins():
         if not plugin.get("enabled"):
             continue
@@ -145,7 +156,16 @@ def plugin_cache_skills() -> list[tuple[str, Path]]:
             continue
         name = plugin["id"].split("@")[0]
         for skill_md in sorted(root.rglob("SKILL.md")):
-            out.append((cache_link_name(name, skill_md.parent, root), skill_md.parent))
+            skill = skill_md.parent
+            inner = skill.relative_to(root)
+            out.append(
+                CacheSkill(
+                    cache_link_name(name, skill, root),
+                    skill,
+                    plugin["id"],
+                    "" if inner == Path(".") else inner.as_posix(),
+                )
+            )
     return out
 
 
@@ -209,6 +229,16 @@ def source_label(path: Path) -> str:
         return tilde(path)
 
 
+def column(names: Iterable[str], minimum: int = 26) -> int:
+    """Width for a name column: enough for its longest entry.
+
+    A fixed 26 was fine until mattpocock-skills arrived carrying names like
+    `mattpocock-skills-improve-codebase-architecture`, each of which shoved every
+    column right of it out of alignment.
+    """
+    return max([minimum, *(len(name) + 2 for name in names)])
+
+
 # --------------------------------------------------------------------------
 # symlink fan-out
 # --------------------------------------------------------------------------
@@ -258,8 +288,8 @@ def own_link_plan() -> list[Link]:
 def cache_link_plan() -> list[Link]:
     """Every symlink the installed third-party plugins want, in the two flat roots."""
     return [
-        Link(skill, root / name)
-        for name, skill in plugin_cache_skills()
+        Link(cs.path, root / cs.link)
+        for cs in plugin_cache_skills()
         for root in (AGENTS_SKILLS, CURSOR_SKILLS)
     ]
 
@@ -552,6 +582,32 @@ def plugin_query_ok() -> bool:
 # --------------------------------------------------------------------------
 
 
+def cache_origin(cs: CacheSkill) -> str:
+    """Where a cached third-party skill was synced from, as a URL.
+
+    The cache path is <marketplace>/<plugin>/<version>/…, which says who
+    installed a skill but not what was installed: the version is a manifest
+    string or a sha prefix, and neither is something you can open. So the plugin
+    name is resolved back through marketplace.json to the commit we pinned, and
+    the skill's own position inside the plugin is appended, so that
+    `mattpocock-skills-tdd` lands on skills/engineering/tdd at that sha rather
+    than on the repo root it shares with every other skill in that plugin.
+
+    Two fallbacks. A plugin from someone else's marketplace has no entry here and
+    so no coordinates, and keeps the plugin@marketplace label it had before. A
+    vendored entry is installed from the checked-in copy, so that is what it is
+    synced from, whatever its coordinates still say.
+    """
+    plugin = cs.pid.partition("@")[0]
+    entry = next((e for e in marketplace_entries() if e.get("name") == plugin), None)
+    up = entry_upstream(entry) if entry else None
+    if up is None:
+        return cs.pid
+    if up.vendored:
+        return "/".join(part for part in (f"vendor/{plugin}", cs.inner) if part)
+    return upstream_url(up, cs.inner, short=True)
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     plan = link_plan()
     by_src: dict[Path, dict[Path, str]] = {}
@@ -584,17 +640,17 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     print()
     print(_c("1", "third-party skills, linked out of the plugin cache"))
-    print(dim(f"  {'':<26}{'~/.agents':<12}{'~/.cursor':<12}{'source'}"))
     cache = plugin_cache_skills()
+    width = column(cs.link for cs in cache)
+    print(dim(f"  {'':<{width}}{'~/.agents':<12}{'~/.cursor':<12}{'synced from'}"))
     if not cache:
         print(dim("  none — no enabled plugin in the cache ships a skill"))
-    for name, skill in cache:
+    for cs in cache:
         cells = "".join(
-            cell(classify(Link(skill, root / name))) for root in (AGENTS_SKILLS, CURSOR_SKILLS)
+            cell(classify(Link(cs.path, root / cs.link)))
+            for root in (AGENTS_SKILLS, CURSOR_SKILLS)
         )
-        # The cache path is <marketplace>/<plugin>/<version>/…; name the first two.
-        rel = skill.relative_to(PLUGIN_CACHE).parts
-        print(f"  {name:<26}{cells}{dim(f'{rel[1]}@{rel[0]}')}")
+        print(f"  {cs.link:<{width}}{cells}{dim(cache_origin(cs))}")
 
     print()
     print(_c("1", "marketplace entries"))
@@ -602,15 +658,26 @@ def cmd_status(args: argparse.Namespace) -> int:
     if not entries:
         print(dim(f"  none — {tilde(MARKETPLACE)} not written yet"))
     else:
+        width = column(e["name"] for e in entries)
+        print(dim(f"  {'':<{width}}{'version':<26}{'state':<16}{'synced from'}"))
         installed = {p["id"].split("@")[0]: p for p in installed_plugins()}
         for entry in entries:
             got = installed.get(entry["name"])
             if got:
-                state = ok("enabled") if got.get("enabled") else warn("disabled")
+                label = "enabled" if got.get("enabled") else "disabled"
+                state = (ok if got.get("enabled") else warn)(f"{label:<16}")
                 version = got.get("version", "?")
             else:
-                state, version = bad("not installed"), "-"
-            print(f"  {entry['name']:<26}{version:<26}{state}")
+                state, version = bad(f"{'not installed':<16}"), "-"
+            up = entry_upstream(entry)
+            if up is None:
+                source = str(entry.get("source", "?"))
+            elif up.vendored:
+                # Installed from the checked-in copy; the pin says what it was cut from.
+                source = f"vendor/{entry['name']}  <- {upstream_url(up, short=True)}"
+            else:
+                source = upstream_url(up, short=True)
+            print(f"  {entry['name']:<{width}}{version:<26}{state}{dim(source)}")
 
     print()
     print(_c("1", "other plugins installed"))
@@ -711,6 +778,24 @@ def upstreams(names: list[str] | None = None) -> list[Upstream]:
     else:
         wanted = list(entries.values())
     return [u for u in (entry_upstream(e) for e in wanted) if u]
+
+
+def upstream_url(up: Upstream, inner: str = "", short: bool = False) -> str:
+    """Where a pinned entry's bytes come from, on GitHub.
+
+    `inner` reaches a skill *inside* the consumed subpath, which is what a
+    multi-skill plugin needs: mattpocock-skills consumes a whole repo, so its
+    subpath is empty and only `inner` tells one of its skills from the rest.
+
+    `short` drops the scheme and abbreviates the sha. The full form is a README
+    link, where the text is the sha and the href has to resolve; the short form
+    is a terminal column, where 33 characters of `https://` and trailing sha are
+    33 characters of nothing.
+    """
+    path = "/".join(part.strip("/") for part in (up.subpath or "", inner) if part.strip("/"))
+    scheme = "" if short else "https://"
+    sha = up.sha[:7] if short else up.sha
+    return f"{scheme}github.com/{up.repo}/tree/{sha}" + (f"/{path}" if path else "")
 
 
 def have_gh() -> bool:
@@ -1308,12 +1393,6 @@ def cell_text(text: str, limit: int = 180) -> str:
     if 0 < stop <= limit:
         return text[: stop + 1]
     return text[: text.rfind(" ", 0, limit)] + " …"
-
-
-def upstream_url(up: Upstream) -> str:
-    if up.subpath:
-        return f"https://github.com/{up.repo}/tree/{up.sha}/{up.subpath}"
-    return f"https://github.com/{up.repo}/tree/{up.sha}"
 
 
 def readme_body() -> str:
