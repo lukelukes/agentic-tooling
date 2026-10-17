@@ -91,6 +91,11 @@
         "ref": "main",
         "sha": "c55ee46073ed923f86ce59a5eb3b6d895095d1b7"
       }
+    },
+    {
+      "name": "tech-debt-audit",
+      "description": "A user-invoked audit that names a codebase's real debt, every finding cited to file:line.",
+      "source": "./vendor/tech-debt-audit"
     }
   ]
 }

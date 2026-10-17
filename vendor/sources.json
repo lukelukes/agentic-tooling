@@ -1,0 +1,11 @@
+{
+  "tech-debt-audit": {
+    "source": {
+      "source": "github",
+      "repo": "ksimback/tech-debt-skill",
+      "ref": "main",
+      "sha": "5a15c1ca4a929b2759461c218478de391a8bda0f"
+    },
+    "digest": "b5d40adfb3b364fe4f89f11ab77f3143325c467dc528d97f1eae0a2c66b418fc"
+  }
+}
