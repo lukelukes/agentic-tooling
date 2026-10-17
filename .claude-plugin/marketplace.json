@@ -96,6 +96,11 @@
       "name": "tech-debt-audit",
       "description": "A user-invoked audit that names a codebase's real debt, every finding cited to file:line.",
       "source": "./vendor/tech-debt-audit"
+    },
+    {
+      "name": "asd-ste100",
+      "description": "Rewrites English that an agent or pipeline must parse into ASD-STE100 Simplified Technical English.",
+      "source": "./vendor/asd-ste100"
     }
   ]
 }
