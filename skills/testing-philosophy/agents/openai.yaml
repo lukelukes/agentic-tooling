@@ -1,0 +1,3 @@
+interface:
+  display_name: "Testing Philosophy"
+  short_description: "Honeycomb testing, classical mocking, and table-driven cases"

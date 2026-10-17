@@ -1,0 +1,53 @@
+# Research and provenance
+
+The sources were researched on 2026-09-27. The quotes are from the primary pages unless a line says otherwise. Chapter numbers for Khorikov's book are from memory and have not been verified, so they are left out.
+
+## Principle → source
+
+| Principle | Sources |
+|---|---|
+| Test behavior, not implementation; test via public APIs | Google TotT "Test Behavior, Not Implementation" (2013) https://testing.googleblog.com/2013/08/testing-on-toilet-test-behavior-not.html; TotT "Prefer Testing Public APIs Over Implementation-Detail Classes" (2015) https://testing.googleblog.com/2015/01/testing-on-toilet-prefer-testing-public.html; SWE at Google ch. 12 https://abseil.io/resources/swe-book/html/ch12.html; Khorikov "Unit testing private methods" https://enterprisecraftsmanship.com/posts/unit-testing-private-methods/ |
+| Four pillars; resistance to refactoring non-negotiable | Khorikov, *Unit Testing Principles, Practices, and Patterns* (Manning 2020) https://www.manning.com/books/unit-testing; "Unit tests value proposition" https://enterprisecraftsmanship.com/posts/unit-test-value-proposition/. The "non-negotiable" quote was checked only against the secondary summary at https://dzx.fr/blog/unit-testing-principles-practices-patterns/ |
+| Output > state > communication | Khorikov "Styles of unit testing" https://enterprisecraftsmanship.com/posts/styles-of-unit-testing/; SWE at Google ch. 12 "Test State, Not Interactions"; TotT "Change-Detector Tests Considered Harmful" (2015) https://testing.googleblog.com/2015/01/testing-on-toilet-change-detector-tests.html |
+| Code quadrants, humble object, functional core | Khorikov "How to do painless TDD" https://enterprisecraftsmanship.com/posts/painless-tdd/; "Immutable architecture" https://enterprisecraftsmanship.com/posts/immutable-architecture/ |
+| Mock only unmanaged dependencies; never assert on stubs | Khorikov "When to Mock" https://enterprisecraftsmanship.com/posts/when-to-mock/; "Unit Testing Dependencies: The Complete Guide" https://enterprisecraftsmanship.com/posts/unit-testing-dependencies/ |
+| Mock at the edge (the last type before the unmanaged dependency); only mock types you own | Edge: Khorikov's book and "Unit Testing Dependencies" (above). "Only mock types you own": Freeman and Pryce, *Growing Object-Oriented Software, Guided by Tests*; Khorikov "Mocking types that you own" https://khorikov.org/posts/2020-06-15-mocking-types-that-you-own/ calls it "not 100% strict" and prefers "Only mock types that you understand" |
+| Real > fake > mock; fakes need contract tests | SWE at Google ch. 13 https://abseil.io/resources/swe-book/html/ch13.html; "Increase Test Fidelity By Avoiding Mocks" (2024) https://testing.googleblog.com/2024/02/increase-test-fidelity-by-avoiding-mocks.html; TotT "Don't Overuse Mocks" (2013) https://testing.googleblog.com/2013/05/testing-on-toilet-dont-overuse-mocks.html |
+| DAMP, builders, cause and effect | TotT "Tests Too DRY? Make Them DAMP!" (2019) https://testing.googleblog.com/2019/12/testing-on-toilet-tests-too-dry-make.html; TotT "Keep Cause and Effect Clear" (2017) https://testing.googleblog.com/2017/01/testing-on-toilet-keep-cause-and-effect.html; Khorikov "DRY vs DAMP in Unit Tests" https://enterprisecraftsmanship.com/posts/dry-damp-unit-tests/; Nat Pryce "Test Data Builders" http://www.natpryce.com/articles/000714.html (reachable; verified on re-check) |
+| No logic in tests; independent expected values | TotT "Don't Put Logic in Tests" (2014) https://testing.googleblog.com/2014/07/testing-on-toilet-dont-put-logic-in.html; Khorikov "Leaking domain knowledge to tests" https://enterprisecraftsmanship.com/posts/leaking-domain-knowledge-tests/ |
+| One behavior per test; AAA | TotT "Test Behaviors, Not Methods" (2014) https://testing.googleblog.com/2014/04/testing-on-toilet-test-behaviors-not.html; Khorikov's book (AAA chapter, checked through secondary summaries) |
+| Behavior names | TotT "Writing Descriptive Test Names" (2014) https://testing.googleblog.com/2014/10/testing-on-toilet-writing-descriptive.html; Khorikov "You are naming your tests wrong" https://enterprisecraftsmanship.com/posts/you-naming-tests-wrong/ |
+| Clear failure messages | SWE at Google ch. 12 "Write Clear Failure Messages"; Go style guide https://google.github.io/styleguide/go/decisions |
+| Hermeticity, sizes, flakiness | SWE at Google ch. 11 https://abseil.io/resources/swe-book/html/ch11.html and ch. 14 https://abseil.io/resources/swe-book/html/ch14.html; "Flaky Tests at Google" (2016) https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html |
+| Injected clock; no ambient time | Khorikov "Domain model purity and the current time" https://enterprisecraftsmanship.com/posts/domain-model-purity-current-time/; Fowler "Eradicating Non-Determinism in Tests" (2011) https://martinfowler.com/articles/nonDeterminism.html |
+| Coverage as a negative indicator | "Code Coverage Best Practices" (2020) https://testing.googleblog.com/2020/08/code-coverage-best-practices.html; SWE at Google ch. 11; Khorikov, Tech Lead Journal ep. 58 https://techleadjournal.dev/episodes/58/ |
+| Honeycomb / integration-first | Spotify "Testing of Microservices" (2018) https://engineering.atspotify.com/2018/01/testing-of-microservices; Kent C. Dodds "Write tests. Not too many. Mostly integration." https://kentcdodds.com/blog/write-tests and "The Testing Trophy" https://kentcdodds.com/blog/the-testing-trophy-and-testing-classifications; Fowler "On the Diverse and Fantastical Shapes of Testing" (2021) https://martinfowler.com/articles/2021-test-shapes.html |
+| Hermetic slice infrastructure | Testcontainers best practices https://www.docker.com/blog/testcontainers-best-practices/; singleton containers https://java.testcontainers.org/test_framework_integration/manual_lifecycle_control/; pgtestdb https://github.com/peterldowns/pgtestdb; IntegreSQL https://github.com/allaboutapps/integresql; Spring test transactions https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/tx.html |
+| Tables | Go wiki https://go.dev/wiki/TableDrivenTests; Cheney "Prefer table driven tests" https://dave.cheney.net/2019/05/07/prefer-table-driven-tests; Go loopvar https://go.dev/blog/loopvar-preview; synctest https://pkg.go.dev/testing/synctest; JUnit parameterized tests https://docs.junit.org/current/writing-tests/parameterized-classes-and-tests.html; Vitest https://vitest.dev/api/test |
+
+## Tensions and deliberate choices
+
+- **Portfolio shape (deliberate departure).** Google recommends a pyramid: 70/20/10 in "Just Say No to More End-to-End Tests" (https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html) and 80/15/5 in SWE at Google ch. 11. Google names an E2E-heavy suite the "ice cream cone" anti-pattern. Google's caveats do not help here: the 2015 post says "The exact mix will be different for each team, but in general, it should retain that pyramid shape", and ch. 11's "local realities" sentence sits next to the ice-cream-cone warning, so Google's flexibility covers ratios, not shape. Khorikov also describes his portfolio as a pyramid, with heavy unit testing of the domain model and E2E tests kept to a minimum. **This skill follows the user's honeycomb instead, as the user's own decision.** Most feature coverage comes from hermetic slice tests and integration tests, with few unit tests. Supporting sources:
+  - Spotify's honeycomb.
+  - Kent C. Dodds's testing trophy ("mostly integration").
+  - Fowler's observation that the disagreement is mostly about definitions (honeycomb "integration tests" are largely his sociable unit tests).
+  - Google ch. 14's list of what unit tests miss (unfaithful doubles, configuration) explains why, but Google itself does not draw this conclusion.
+
+  The skill accepts slower suites and wider failure scope in exchange. It mitigates both with hermeticity, real engines in containers, per-test isolation, and diagnostic output.
+- **"E2E" vs "integrated".** Spotify wants *integrated* tests (tests that depend on another system's correctness) to be "ideally none". This skill's big slice tests stop at the system boundary and substitute unmanaged systems, so they correspond to Spotify's *integration* tests, not its integrated ones.
+- **Mocking strictness.** Google ch. 13 ranks real > fake > stub > interaction testing, and allows interaction testing for state-changing calls in general. Khorikov is stricter: mock only unmanaged dependencies, and never managed ones or in-process collaborators. This skill takes Khorikov's line.
+- **Databases in tests.**
+  - Google allows fakes when the real dependency is slow, provided the fake's fidelity is tested.
+  - Khorikov rejects in-memory DB substitutes and prefers the real engine.
+  - This skill uses the real engine for managed dependencies. Fakes are for unmanaged dependencies; a fake of a managed dependency is allowed only when no real engine can run hermetically on one machine, and it must pass the same contract tests as the real adapter.
+- **Transactional rollback isolation.** Fowler (2011) accepts rollback per test. Khorikov prefers cleanup at the start of each test. Spring documents rollback traps, such as server threads under `RANDOM_PORT`. This skill prefers unique data or template-cloned databases and restricts rollback to same-connection code.
+- **Coverage measurement.** SWE at Google ch. 11 recommends measuring coverage from small tests only. The 2020 coverage post says integration coverage matters too. A honeycomb suite necessarily relies on the second view. The 2020 post does endorse team-chosen thresholds, per-commit coverage goals and coverage gates, while warning that high coverage does not prove the code is well tested. This skill does not set a coverage target; it uses uncovered lines only to find untested behavior.
+- **Multiple acts per test.** Khorikov's rule is one act per unit test, with an exception for slow integration tests. This skill applies that exception to slice scenarios.
+
+## Unverified or left out
+
+- Exact wording of several Testing on the Toilet code examples. The names and snippets in this skill are adaptations of them, not quotations.
+- The "Relevant? In. Irrelevant? Out." rule of thumb. It may come from an author's comment on "Keep Cause and Effect Clear", not the post body, so it is not quoted.
+- Khorikov's exact phrase "longest happy path" and his book chapter numbers. The concept is used here; the phrase is not attributed as a quotation.
+- The medium-size "sleep ≤ 100 ms" cell in Google's 2010 test-size table. Left out.
+- The infographic at khorikov.org/files/infographic.pdf was authored by Yoan Thirion. It is not used as a primary source.
