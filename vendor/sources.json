@@ -8,6 +8,16 @@
     },
     "digest": "ccd7f70e171d57b00a08b0acdcc702f7bbc12a460f52dd9a598dafacdae41b4a"
   },
+  "show-me": {
+    "source": {
+      "source": "git-subdir",
+      "url": "humanlayer/skills",
+      "path": "plugins/show-me",
+      "ref": "main",
+      "sha": "653b6411c1f70c275a18e37673b042ff99f67ceb"
+    },
+    "digest": "f46af42fa1dbb940e83b646123bcd9e50578003b8a8866ceb9ed3bfcd9d3adf9"
+  },
   "tech-debt-audit": {
     "source": {
       "source": "github",

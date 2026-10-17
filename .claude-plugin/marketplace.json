@@ -101,6 +101,11 @@
       "name": "asd-ste100",
       "description": "Rewrites English that an agent or pipeline must parse into ASD-STE100 Simplified Technical English.",
       "source": "./vendor/asd-ste100"
+    },
+    {
+      "name": "show-me",
+      "description": "Explains the current topic visually: pseudocode, call trees, diagrams, focused HTML.",
+      "source": "./vendor/show-me"
     }
   ]
 }
