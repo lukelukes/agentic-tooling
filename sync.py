@@ -53,6 +53,11 @@ VENDOR_DIR = REPO / "vendor"
 VENDOR_SOURCES = VENDOR_DIR / "sources.json"
 MARKETPLACE = REPO / ".claude-plugin" / "marketplace.json"
 
+EXCLUDE: dict[str, tuple[str, ...]] = {
+    # An MCP server and a Pi extension, both alternatives to the skill itself.
+    "visual-explainer": ("mcp/", "extension.ts"),
+}
+
 HOME = Path.home()
 
 # Claude Code reads skills from ~/.claude/skills and agents from ~/.claude/agents.
@@ -736,6 +741,7 @@ class Upstream:
     sha: str  # what we are pinned to
     subpath: str | None  # the slice we consume; None means the whole repo
     vendored: bool = False  # content checked in under vendor/, not fetched on install
+    exclude: tuple[str, ...] = ()  # parts of the slice check/diff skip; see EXCLUDE
 
 
 def entry_upstream(entry: dict) -> Upstream | None:
@@ -764,7 +770,7 @@ def entry_upstream(entry: dict) -> Upstream | None:
     ref, sha = source.get("ref"), source.get("sha")
     if not (repo and ref and sha):
         return None
-    return Upstream(entry["name"], repo, ref, sha, subpath, vendored)
+    return Upstream(entry["name"], repo, ref, sha, subpath, vendored, EXCLUDE.get(entry["name"], ()))
 
 
 def upstreams(names: list[str] | None = None) -> list[Upstream]:
@@ -855,17 +861,38 @@ class Comparison:
     @property
     def relevant(self) -> bool:
         """Behind upstream *in a way that reaches us*."""
-        return self.behind and bool(self.files or self.up.subpath is None)
+        return self.behind and bool(self.files or not narrowed(self.up))
 
     @property
     def url(self) -> str:
         return f"https://github.com/{self.up.repo}/compare/{self.up.sha}...{self.head}"
 
 
+def narrowed(up: Upstream) -> bool:
+    """Whether the file list is filtered, so an empty one means "nothing for us"."""
+    return up.subpath is not None or bool(up.exclude)
+
+
+def scope_label(up: Upstream) -> str:
+    scope = up.subpath or "the whole repo"
+    if up.exclude:
+        scope += f" (excluding {', '.join(up.exclude)})"
+    return scope
+
+
 def consumed(up: Upstream, filename: str) -> bool:
     if up.subpath is None:
+        rel = filename
+    elif filename == up.subpath:
         return True
-    return filename == up.subpath or filename.startswith(up.subpath.rstrip("/") + "/")
+    elif filename.startswith(up.subpath.rstrip("/") + "/"):
+        rel = filename[len(up.subpath.rstrip("/")) + 1 :]
+    else:
+        return False
+    # An entry ending in "/" is a directory; anything else is one file.
+    return not any(
+        rel.startswith(x) if x.endswith("/") else rel == x for x in up.exclude
+    )
 
 
 def compare(up: Upstream) -> Comparison:
@@ -930,15 +957,15 @@ def cmd_check(args: argparse.Namespace) -> int:
             continue
 
         count = f"{comp.commits} commit{'s' if comp.commits != 1 else ''}"
-        if up.subpath and not comp.files:
+        if narrowed(up) and not comp.files:
             # Behind, but every one of those commits landed outside our slice.
-            note = f"{count}, none touching {up.subpath}"
+            note = f"{count}, none touching {scope_label(up)}"
             print(f"  {dim('behind elsewhere'):<22}{up.name:<26}{dim(moved)}  {dim(note)}")
             continue
 
         scope = f"{len(comp.files)} file{'s' if len(comp.files) != 1 else ''}"
-        if up.subpath:
-            scope += f" under {up.subpath}"
+        if narrowed(up):
+            scope += f" under {scope_label(up)}"
             if comp.total_files != len(comp.files):
                 scope += dim(f" (of {comp.total_files} total)")
         note = f"{count}, {scope}"
@@ -980,7 +1007,7 @@ def cmd_diff(args: argparse.Namespace) -> int:
         print(f"{ok('up to date')} {up.name} at {up.sha[:7]}")
         return 0
 
-    scope = up.subpath or "the whole repo"
+    scope = scope_label(up)
     print(_c("1", f"{up.name}  {up.sha[:7]}..{comp.head[:7]}"))
     print(dim(f"  {comp.commits} commits upstream; showing {scope}"))
     print(dim(f"  {comp.url}\n"))
@@ -1051,13 +1078,13 @@ def is_clean(*paths: str) -> bool:
 def update_message(comp: Comparison) -> str:
     """The commit body: what was accepted, and the evidence it was reviewable."""
     up = comp.up
-    scope = up.subpath or "the whole repo"
+    scope = scope_label(up)
     lines = [
         f"chore(deps): update {up.name} to {comp.head[:7]}",
         "",
         f"{comp.commits} commit{'s' if comp.commits != 1 else ''} upstream since "
         f"{up.sha[:7]}; {len(comp.files)} file(s) under {scope}"
-        + (f", of {comp.total_files} changed in total" if up.subpath else "")
+        + (f", of {comp.total_files} changed in total" if narrowed(up) else "")
         + ".",
         "",
         comp.url,
@@ -1155,7 +1182,7 @@ def cmd_update(args: argparse.Namespace) -> int:
 
     bumped: list[Comparison] = []
     for comp in behind:
-        scope = f"{len(comp.files)} file(s) under {comp.up.subpath or 'the whole repo'}"
+        scope = f"{len(comp.files)} file(s) under {scope_label(comp.up)}"
         paths = [str(MARKETPLACE.relative_to(REPO))]
         if comp.up.vendored:
             # The pin lives in vendor/sources.json, and accepting it means the
@@ -1285,7 +1312,7 @@ def fetch_subtree(up: Upstream, dest: Path) -> None:
 def vendor_entry(up: Upstream, sha: str) -> Path:
     """Fetch `sha` into vendor/<name>/ and record the coordinates that produced it."""
     dest = VENDOR_DIR / up.name
-    pinned = Upstream(up.name, up.repo, up.ref, sha, up.subpath, up.vendored)
+    pinned = Upstream(up.name, up.repo, up.ref, sha, up.subpath, up.vendored, up.exclude)
     fetch_subtree(pinned, dest)
 
     source: dict = {"source": "github", "repo": up.repo, "ref": up.ref, "sha": sha}

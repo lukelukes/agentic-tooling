@@ -44,7 +44,7 @@
       "description": "Thesis, antithesis, synthesis as a structured way through a hard decision.",
       "source": {
         "source": "github",
-        "repo": "KyleAMathews/hegelian-dialectic-skill",
+        "repo": "KyleAMathews/field-lab",
         "ref": "main",
         "sha": "4812a83ab03c1fa9ee3274d493411087c06bac86"
       }
@@ -53,9 +53,8 @@
       "name": "emil-design-eng",
       "description": "Emil Kowalski's design-engineering taste: motion, interaction detail, restraint.",
       "source": {
-        "source": "git-subdir",
-        "url": "emilkowalski/skill",
-        "path": "skills/emil-design-eng",
+        "source": "github",
+        "repo": "emilkowalski/skills",
         "ref": "main",
         "sha": "e695d13cb298db0f46d5ef05be2ad13fa12908a6"
       }
