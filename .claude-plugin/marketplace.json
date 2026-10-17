@@ -81,6 +81,16 @@
         "ref": "main",
         "sha": "b29e7cf65e5cb78a5ac33d582270551bc74a14eb"
       }
+    },
+    {
+      "name": "mattpocock-skills",
+      "description": "Matt Pocock's engineering flow: grilling, specs, tickets, TDD, code review, domain modelling.",
+      "source": {
+        "source": "github",
+        "repo": "mattpocock/skills",
+        "ref": "main",
+        "sha": "c55ee46073ed923f86ce59a5eb3b6d895095d1b7"
+      }
     }
   ]
 }
