@@ -8,6 +8,15 @@
     },
     "digest": "ccd7f70e171d57b00a08b0acdcc702f7bbc12a460f52dd9a598dafacdae41b4a"
   },
+  "interfaces": {
+    "source": {
+      "source": "github",
+      "repo": "jakubkrehel/skills",
+      "ref": "main",
+      "sha": "4c66b1fa86e9ab70187b43d7da9b6fdb29f2ef63"
+    },
+    "digest": "d4e2d191c50638c179a880e31af7224cb4a53bacbee3ed4a349e9816f16347a7"
+  },
   "show-me": {
     "source": {
       "source": "git-subdir",
