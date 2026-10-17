@@ -1,0 +1,37 @@
+{
+  "skill_name": "sqlite-testing-philosophy",
+  "evals": [
+    {
+      "id": 1,
+      "name": "failure-schedule",
+      "prompt": "Harden the tests for the supplied batch.py import_batch function. Its documented contract is authoritative. Use standard-library unittest, leave production code unchanged, and keep the suite small and deterministic. Check meaningful dependency failures, atomicity, cleanup, and usability after an error. Run the tests and show that they detect a plausible defect in a disposable copy. Save test_batch.py, the fixture copy, and a concise report with commands and limitations.",
+      "expected_output": "Runnable tests of the real import path with a trustworthy failure controller and assertions on state and resources; verified defect detection.",
+      "files": [
+        "evals/files/batch.py"
+      ],
+      "expectations": [
+        "The suite executes successfully against the supplied unchanged import_batch implementation using unittest.",
+        "Tests exercise begin, every put position for a multi-row batch, and commit with transient and persistent failure modes; the controller records whether faults fired.",
+        "Each injected pre-effect failure checks the exact original rows, released transaction count, and a later successful import on the same store after injection is disabled.",
+        "Failure schedules use fresh fixtures, have an explicit bound, and distinguish a reached fault from fault-free completion.",
+        "A disposable plausible production mutation is detected by a behavioral assertion; the original fixture remains unchanged.",
+        "The report accurately limits the evidence to simulated dependency exceptions and does not claim disk or power-loss durability."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "coverage-review",
+      "prompt": "Review this test strategy only; do not implement anything. We have a Rust document index with 98% line coverage. Expected search results in tests are calculated by calling the production normalize_and_rank helper. Fuzzing feeds arbitrary bytes to the parser and asserts only that it does not panic. A cache fast path is on in tests; shipping binaries enable extra compiler optimizations. We persist updates and claim power-loss safety because a test kills a child process mid-write and reopens its files. A retry test injects a timeout before send, then asserts success. The service contract says each idempotency key has at most one durable effect, including when a reply is lost after commit. We have two engineer-days now and five minutes of PR CI. Give a prioritized, concrete review grounded in these facts and a feasible first increment, including which claims remain unproven.",
+      "expected_output": "Risk-ranked review with independent result oracles, correct durability limitations, an after-commit retry experiment, bounded work and meaningful assertions.",
+      "files": [],
+      "expectations": [
+        "Identifies the shared production oracle and proposes an independent reference or hand-checked result with concrete semantic assertions.",
+        "Explains why no-panic fuzzing misses wrong answers and proposes an explicit semantic property or model.",
+        "Distinguishes process termination from power loss and identifies missing persistence-model assumptions such as loss, ordering, partial writes, or sync barriers.",
+        "Proposes losing the reply after durable commit, retrying the same idempotency key, and checking exactly one durable effect.",
+        "Prioritizes a feasible two-day increment within five-minute PR CI, with bounded expensive follow-up rather than a universal coverage target.",
+        "Flags deployment configuration gaps and clearly distinguishes provided facts, proposed experiments, and unverified reliability claims."
+      ]
+    }
+  ]
+}

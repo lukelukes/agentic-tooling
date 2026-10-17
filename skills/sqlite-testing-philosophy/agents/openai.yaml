@@ -1,0 +1,3 @@
+interface:
+  display_name: "SQLite Testing Philosophy"
+  short_description: "Build confidence through adversarial testing"
