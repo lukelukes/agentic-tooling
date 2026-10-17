@@ -111,6 +111,17 @@
       "name": "interfaces",
       "description": "Jakub Krehel's interface skills: typography, color, layout, accessibility, UI polish and writing.",
       "source": "./vendor/interfaces"
+    },
+    {
+      "name": "make-interfaces-feel-better",
+      "description": "Design-engineering details that make an interface feel polished: motion, surfaces, icons, type.",
+      "source": {
+        "source": "git-subdir",
+        "url": "jakubkrehel/make-interfaces-feel-better",
+        "path": "skills/make-interfaces-feel-better",
+        "ref": "main",
+        "sha": "35545ea1512ad59fa463e6b1f95ca9c052981fe6"
+      }
     }
   ]
 }
