@@ -122,6 +122,17 @@
         "ref": "main",
         "sha": "35545ea1512ad59fa463e6b1f95ca9c052981fe6"
       }
+    },
+    {
+      "name": "gh-stack",
+      "description": "Stacked PRs with gh-stack: create, edit, sync, rebase and submit dependent branches.",
+      "source": {
+        "source": "git-subdir",
+        "url": "github/gh-stack",
+        "path": "skills/gh-stack",
+        "ref": "main",
+        "sha": "2bd699a544a09cb5c45a013d03416e0894b0454e"
+      }
     }
   ]
 }
