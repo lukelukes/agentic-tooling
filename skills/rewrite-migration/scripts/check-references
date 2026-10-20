@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+"""check-references — fail when this skill's references drift from the rule catalogue.
+
+Runs `rewrite recipe rules --json --all` with the `rewrite` on PATH (or $REWRITE)
+and compares it with the `## <heading>` lines under references/:
+
+    1. a catalogue rule that is not retired has no `## <ruleId>` section;
+    2. a rule id has more than one section;
+    3. a `## area/slug` heading under references/<module>/ names no catalogue
+       rule (retired rules count as known, so their sections may stay);
+       other `##` headings there are prose and are not checked;
+    4. a catalogue rule that is not retired has a `guide` other than
+       `rewrite-migration#<ruleId>`;
+    5. a `## <Recipe FQN>` under references/migrations/ names a Recipe that
+       `rewrite recipe show <FQN>` does not know;
+    6. a `##` heading under references/<module>/ is a rule id with extra
+       whitespace around it, which the exact lookup would not find.
+
+A section is found by exact heading match, whatever the file is called.
+Headings inside fenced code blocks (CommonMark fences) do not count.
+
+Exit 0 when the references match, 1 with one line per problem when they do not,
+2 when the catalogue cannot be read or a rule in it has no string id. Plain stdlib Python 3, like ./link.
+
+    skills/rewrite-migration/scripts/check-references [--skill DIR]
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+SKILL_NAME = "rewrite-migration"
+SCHEMA = "rewrite.rules/1"
+MIGRATIONS = "migrations"
+# A heading shaped like a rule id: one slash, no spaces. Prose headings ("## OpenFeign encoders") are not
+# sections of a rule; a mistyped id ("## Jackson/Custom") still is, so it is reported as unknown.
+RULE_ID_SHAPED = re.compile(r"^[^\s/]+/[^\s/]+$")
+# A CommonMark code fence: up to three spaces, then three or more backticks or tildes. It closes on a fence of the
+# same character, at least as long, with nothing after it.
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+
+
+@dataclass(frozen=True)
+class Heading:
+    text: str
+    path: Path
+    line: int
+
+    def where(self, root: Path) -> str:
+        return f"{self.path.relative_to(root)}:{self.line}"
+
+
+class CatalogueError(Exception):
+    pass
+
+
+def rewrite_command() -> str:
+    return os.environ.get("REWRITE") or "rewrite"
+
+
+def run_rewrite(*args: str) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run([rewrite_command(), *args], capture_output=True, text=True)
+    except OSError as e:
+        raise CatalogueError(f"cannot run {rewrite_command()}: {e.strerror}") from e
+
+
+def read_catalogue() -> list[dict]:
+    result = run_rewrite("recipe", "rules", "--json", "--all")
+    command = f"{rewrite_command()} recipe rules --json --all"
+    if result.returncode != 0:
+        detail = result.stderr.strip().splitlines()
+        raise CatalogueError(f"{command} exited {result.returncode}" + (f": {detail[-1]}" if detail else ""))
+    try:
+        document = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise CatalogueError(f"{command} printed no JSON document: {e}") from e
+    schema = document.get("schema") if isinstance(document, dict) else None
+    if schema != SCHEMA:
+        raise CatalogueError(f"{command} printed schema {schema!r}; this check reads {SCHEMA}")
+    rules = document.get("rules")
+    if not isinstance(rules, list):
+        raise CatalogueError(f"{command} printed no rules list")
+    for number, r in enumerate(rules, start=1):
+        if not isinstance(r, dict) or not isinstance(r.get("id"), str):
+            raise CatalogueError(f"{command} printed a rules list whose rule {number} has no string id")
+    return rules
+
+
+def headings(path: Path) -> list[Heading]:
+    """The `## ` headings outside code fences, with the text after `## ` exactly as written."""
+    found: list[Heading] = []
+    fence: str | None = None
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        match = FENCE.match(line)
+        if match:
+            marker, rest = match.groups()
+            if fence is None:
+                fence = marker
+            elif marker[0] == fence[0] and len(marker) >= len(fence) and not rest.strip():
+                fence = None
+            continue
+        if fence is None and line.startswith("## "):
+            found.append(Heading(line[3:], path, number))
+    return found
+
+
+def check(skill: Path) -> tuple[list[str], int]:
+    """The problems found, and how many live rules the catalogue has."""
+    references = skill / "references"
+    rules = read_catalogue()
+    known = {r["id"] for r in rules}
+    live = sorted((r for r in rules if not r.get("retired")), key=lambda r: r["id"])
+
+    rule_sections: dict[str, list[Heading]] = {}
+    migration_sections: list[Heading] = []
+    padded: list[Heading] = []
+    problems: list[str] = []
+    for path in sorted(references.rglob("*.md")):
+        in_migrations = path.relative_to(references).parts[0] == MIGRATIONS
+        for heading in headings(path):
+            if in_migrations:
+                migration_sections.append(heading)
+            elif RULE_ID_SHAPED.match(heading.text):
+                rule_sections.setdefault(heading.text, []).append(heading)
+            elif heading.text != heading.text.strip() and RULE_ID_SHAPED.match(heading.text.strip()):
+                padded.append(heading)
+
+    for r in live:
+        rule_id = r["id"]
+        if rule_id not in rule_sections:
+            problems.append(f"{rule_id}: no '## {rule_id}' section under references/ (module {r.get('module')})")
+        expected = f"{SKILL_NAME}#{rule_id}"
+        if r.get("guide") != expected:
+            problems.append(f"{rule_id}: guide is {r.get('guide')!r}, expected {expected!r}")
+    for h in padded:
+        problems.append(
+            f"{h.where(skill)}: '## {h.text}' has whitespace around the rule id, "
+            "so the exact heading lookup does not find it"
+        )
+    for text, found in sorted(rule_sections.items()):
+        if text in known and len(found) > 1:
+            places = ", ".join(h.where(skill) for h in found)
+            problems.append(f"{text}: {len(found)} sections ({places})")
+        if text not in known:
+            for h in found:
+                problems.append(f"{h.where(skill)}: '## {text}' names no catalogue rule")
+    for h in migration_sections:
+        shown = run_rewrite("recipe", "show", h.text)
+        first = shown.stdout.splitlines()[0].strip() if shown.stdout.strip() else ""
+        if shown.returncode != 0 or first != h.text:
+            problems.append(f"{h.where(skill)}: '## {h.text}' is not a Recipe that 'rewrite recipe show' knows")
+    return problems, len(live)
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="check-references", description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--skill",
+        type=Path,
+        default=Path(__file__).resolve().parent.parent,
+        help="the skill directory holding references/ (default: the one this script is in)",
+    )
+    args = parser.parse_args(argv)
+    try:
+        problems, covered = check(args.skill.resolve())
+    except CatalogueError as e:
+        print(f"check-references: {e}", file=sys.stderr)
+        return 2
+    for problem in problems:
+        print(problem)
+    if problems:
+        return 1
+    print(f"references cover {covered} rules")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

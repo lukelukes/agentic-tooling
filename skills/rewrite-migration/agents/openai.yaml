@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rewrite Migration"
+  short_description: "Finish an OpenRewrite Migration Run from its Worklist"
+  default_prompt: "Use $rewrite-migration to finish the Worklist of the newest rewrite Run in this repository."
